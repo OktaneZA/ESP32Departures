@@ -72,6 +72,11 @@ To change stations or settings later, just run it again and pick **Configure onl
 - Optional screen-blank hours, brightness, refresh interval
 - Timezone — **auto-detected from your PC's locale** (just press Enter to accept)
 
+> **Finding your station's CRS code:** it's the 3-letter code for your station
+> (e.g. `PAD` = London Paddington, `MOT` = Motspur Park). Look it up here:
+> [railwaycodes.org.uk CRS list](http://www.railwaycodes.org.uk/crs/crs0.shtm) or
+> search your station on [nationalrail.co.uk/stations](https://www.nationalrail.co.uk/stations/).
+
 The installer also **checks your station code and key against the API** before
 configuring, and re-prompts if either is rejected — so a typo'd station is caught
 up front. (If the code is wrong anyway, the board itself shows an "Unknown station"
