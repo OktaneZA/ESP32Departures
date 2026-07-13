@@ -3,7 +3,8 @@
 A C++/JSON rewrite of the [Raspberry Pi departure board](https://github.com/OktaneZA/PiDepartures) for the
 **LilyGo T-Display-S3** (ESP32-S3, 1.9″ 170×320 ST7789 LCD). No Pi, no Docker, no
 server — the ESP32 fetches live UK departures over WiFi and drives the built-in
-colour LCD directly.
+colour LCD directly. The aim was to make this even simpler and cheaper than previous iterations. £10 + some 
+effort and you can have this running.
 
 > **Credits.** Derived from Chris Crocker-White's
 > [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display)
