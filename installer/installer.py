@@ -702,13 +702,13 @@ def run_interactive():
 def run_auto(path):
     with open(path) as f:
         d = json.load(f)
-    cfg = {k: d.get(k, "") for k in
+    # A key absent from the JSON means "leave whatever the board already has",
+    # matching the interactive wizard. Pass an explicit "" to clear a setting.
+    cfg = {k: d.get(k) for k in
            ("ssid", "pass", "key", "dep", "dest", "plat", "tz",
             "bus", "busline", "bstart", "bend", "bright", "refr")}
-    if not cfg["tz"]:
+    if cfg["tz"] == "":
         cfg["tz"] = detect_tz()
-    for k, dv in (("bstart", -1), ("bend", -1), ("bright", 180), ("refr", 60)):
-        cfg[k] = d.get(k, dv)
     port = d.get("port") or pick_port()
     print(f"[auto] port={port} flash={d.get('flash', True)}")
     if d.get("flash", True):

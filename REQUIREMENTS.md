@@ -312,7 +312,7 @@ PyInstaller) that flashes the firmware and provisions the board.
 | INST-05 | Flashes bootloader (0x0), partitions (0x8000), boot_app0 (0xe000), firmware (0x10000) via esptool |
 | INST-06 | After flashing, re-detects the (possibly re-enumerated) port before provisioning |
 | INST-07 | Provisions over serial using the PROV protocol; confirms `SAVED` |
-| INST-08 | `--auto <cfg.json>` non-interactive mode for testing/automation |
+| INST-08 | `--auto <cfg.json>` non-interactive mode for testing/automation. A key absent from the JSON keeps the board's existing value (matching INST-11); an explicit `""` clears it |
 | INST-09 | Never persists entered secrets to disk; they go straight to the device |
 | INST-10 | The wizard pre-fills every prompt from the board's current config, read back over `GET` |
 | INST-11 | The WiFi password and API key — the only two values the board will not read back — accept a blank answer meaning "keep"; `provision()` then omits that key so the firmware's COMMIT preserves it |

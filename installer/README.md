@@ -81,8 +81,10 @@ so pressing Enter through the whole wizard changes nothing.
 - WiFi network + password (2.4 GHz only — the ESP32-S3 has no 5 GHz radio)
 - LDBWS API key (your consumer key from [raildata.org.uk](https://raildata.org.uk))
 - Departure station CRS (e.g. `MOT`), optional destination + platform filters
-- **Whether to add a London bus stop** (see below) — just press Enter to skip
-- Optional screen-blank hours, brightness, refresh interval
+- **Whether to add a London bus stop** (see below) — answer `n` if you don't want one
+- Screen-blank hours (the display turns off between them — e.g. 23 to 7 for
+  overnight; enter `-1` for both to keep it on all the time), brightness,
+  refresh interval
 - Timezone — **auto-detected from your PC's locale** (just press Enter to accept)
 
 > **Finding your station's CRS code:** it's the 3-letter code for your station
@@ -92,8 +94,9 @@ so pressing Enter through the whole wizard changes nothing.
 
 The installer also **checks your station code and key against the API** before
 configuring, and re-prompts if either is rejected — so a typo'd station is caught
-up front. (If the code is wrong anyway, the board itself shows an "Unknown station"
-screen rather than a blank error.)
+up front. (This check is skipped if you kept the board's existing key, since it
+has no key to check with; the board itself then shows an "Unknown station" screen
+rather than a blank error.)
 
 ## Adding a London bus stop (optional)
 
@@ -143,7 +146,82 @@ search keeps the stop you already have.)
 One pre-built firmware binary is flashed to every board. Settings are **not**
 compiled in — the installer writes them to the device's flash (NVS) over a small
 USB-serial protocol (`PING`/`CFG`/`COMMIT`), so no recompilation is ever required.
-Serial is opened with `dtr=True, rts=False` to avoid resetting the S3.
+`GET` reads the current settings back (which is how the wizard pre-fills itself)
+and `SCAN` lists the WiFi networks the board can see. Serial is opened with
+`dtr=True, rts=False` to avoid resetting the S3.
+
+## Troubleshooting
+
+The board can tell you what is wrong. Open its serial port at 115200 (PlatformIO's
+`pio device monitor`, or any terminal) and type a command — `GET` reports the
+current settings, `SCAN` lists every WiFi network the board's own radio can see.
+Neither ever prints your password or API key.
+
+### The screen is blank
+
+Almost always **screen-blank hours set the wrong way round**. `GET` shows them:
+
+```
+bstart=6
+bend=22
+```
+
+That means *off* at 06:00 and *back on* at 22:00 — blank for 16 hours a day. You
+probably wanted `bstart=22`, `bend=6`. Re-run the installer, choose **Change
+settings**, and enter them as OFF-hour then ON-hour (or `-1` for both to disable
+blanking). The installer now prints the off-window back to you and queries
+anything longer than half a day.
+
+A board with no clock yet (no WiFi) can also blank unpredictably, because it does
+not know the time — fix the WiFi first.
+
+### It says "No network"
+
+Check the serial log. `AUTH_FAIL` means the **password is wrong**:
+
+```
+[wifi] connecting to MYNET
+Reason: 202 - AUTH_FAIL
+[wifi] connect timed out
+```
+
+Then rule things out with `SCAN`:
+
+```
+MYNET|rssi=-58|ch=6|auth=WPA2/WPA3
+```
+
+- **Not listed at all?** It is almost certainly **5 GHz only**. The ESP32-S3 has
+  no 5 GHz radio. Enable the 2.4 GHz band, or use a 2.4 GHz guest network.
+- **Listed but `rssi` worse than about -80?** Too far from the router.
+- **Listed with a good signal?** The password is wrong. `GET` reports `passlen`
+  (the number of characters stored, never the password itself) — if that does not
+  match your real password's length, it was mistyped. Re-run the installer and
+  re-enter it.
+
+`GET` also reports `wifi=up` or `wifi=down`, so you can confirm a fix without
+watching the log.
+
+### "Unknown station" on screen
+
+The departure CRS code was rejected by National Rail. Re-run the installer and
+correct it — the code is 3 letters, e.g. `MOT`, not the station's full name.
+
+### The bus screen never appears
+
+- It only appears once TfL has answered for your stop at least once. A stop code
+  TfL rejects (HTTP 416) is logged as `unknown stop code` and the screen is
+  skipped entirely — the trains keep working.
+- `GET` shows `bus=` empty if no stop is configured.
+- "No buses due" with the stop's name is **not** an error: it means the stop is
+  valid and nothing is due in the next 30 minutes. Quiet routes late in the
+  evening look exactly like this.
+
+### The installer cannot find the board
+
+- Try a different USB-C cable. Charge-only cables are common and carry no data.
+- The board should appear as an Espressif device (VID `0x303A`). If several
+  serial devices are listed, pick that one.
 
 ## For developers — building the exe
 
@@ -165,10 +243,18 @@ Re-copy `firmware.bin` after any firmware change, then rebuild the exe.
 python installer.py --auto cfg.json
 ```
 
-where `cfg.json` has `port`, `flash`, and the settings keys
+where `cfg.json` has `port`, `flash`, and any of the settings keys
 (`ssid pass key dep dest plat tz bus busline bstart bend bright refr`).
-`bus` is the stop's 5-digit code and `busline` an optional route filter; leave
-`bus` empty for a train-only board.
+
+A key you **leave out** keeps whatever the board already has; pass an explicit
+`""` to clear one. So a partial update is just:
+
+```json
+{ "port": "COM9", "flash": false, "bus": "53441" }
+```
+
+`bus` is the stop's 5-digit code and `busline` an optional route filter; `"bus": ""`
+gives a train-only board.
 
 ## Notes
 
