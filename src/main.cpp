@@ -4,10 +4,12 @@
 // Rail LDBWS REST/JSON feed. Configuration lives on-device (NVS) and is set by
 // the installer over USB serial — one pre-built binary works for every user.
 //
-//   * Fetch task (core 0) polls the API; render loop (core 1) draws the board.
+//   * Fetch task (core 0) polls the APIs; render loop (core 1) draws the board.
 //   * Shared state guarded by a mutex (render never fetches, fetch never draws).
 //   * Exponential back-off; stale data kept with a "No signal" overlay; a
 //     connectivity-warning screen after repeated failures; screen-blank hours.
+//   * Optional second screen: live London bus arrivals from TfL's open Countdown
+//     feed. When a bus stop is configured the board cycles train -> bus -> train.
 //   * Until provisioned, shows an "Awaiting setup" screen and listens on serial.
 
 #include <Arduino.h>
@@ -20,6 +22,7 @@
 #include "model.h"
 #include "display.h"
 #include "rail_api.h"
+#include "bus_api.h"
 
 // ---------------------------------------------------------------------------
 // Shared state (fetch task writes, render loop reads) — guarded by g_mutex.
@@ -31,6 +34,15 @@ static String   g_callingAt;
 static int      g_errCount = 0;
 static bool     g_badStation = false;   // departure CRS rejected by the API
 static uint32_t g_epoch = 0;
+
+// Bus screen state (only touched when a bus stop is configured).
+static std::vector<BusArrival> g_bus;
+static String   g_busStopName;
+static int      g_busErrCount = 0;
+static bool     g_badStop = false;      // stop code rejected by TfL (HTTP 416)
+static bool     g_busHaveData = false;  // at least one successful TfL fetch
+static uint32_t g_busFetchedMs = 0;     // millis() of that fetch, for the countdown
+static uint32_t g_busEpoch = 0;
 
 // ---------------------------------------------------------------------------
 // WiFi + time
@@ -69,47 +81,110 @@ static uint32_t backoffMs(int failures) {
 
 // ---------------------------------------------------------------------------
 // Fetch task — core 0. Never touches the display.
+//
+// One task drives both feeds rather than one task each: a TLS handshake needs a
+// 16 KB stack, and the two polls are short and never overlap, so sharing a
+// single stack costs nothing and halves the memory. Each feed keeps its own
+// deadline, so the trains can refresh on the user's interval while the buses
+// follow TfL's 30-second cache.
 // ---------------------------------------------------------------------------
+
+// Poll the rail API once and publish the result. Returns how long to wait.
+static uint32_t fetchTrainsOnce() {
+    std::vector<Departure> deps;
+    String station, calling;
+    rail::Fetch st = rail::fetchDepartures(cfg::get(), deps, station, calling);
+    bool ok = (st == rail::Fetch::Ok);
+
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    if (ok) {
+        g_deps = deps;
+        g_station = station;
+        g_callingAt = calling;
+        g_errCount = 0;
+        g_badStation = false;
+    } else if (st == rail::Fetch::BadStation) {
+        g_badStation = true;   // config error — show a dedicated screen
+        g_errCount = 0;        // not a connectivity problem
+    } else {
+        g_errCount++;          // keep last-good g_deps on screen (stale)
+        g_badStation = false;
+    }
+    g_epoch++;
+    int fails = g_errCount;
+    xSemaphoreGive(g_mutex);
+
+    if (ok) {
+        Serial.printf("[fetch] ok: %d departures for %s\n", (int)deps.size(), station.c_str());
+        uint32_t wait_ms = (uint32_t)cfg::get().refresh * 1000;
+        return wait_ms ? wait_ms : 60000;
+    }
+    if (st == rail::Fetch::BadStation) {
+        Serial.printf("[fetch] invalid station '%s' - reconfigure via installer\n",
+                      cfg::get().dep_crs.c_str());
+        return 30000;   // don't hammer a doomed request
+    }
+    uint32_t wait = backoffMs(fails);
+    Serial.printf("[fetch] failed (%d) - retry in %us\n", fails, wait / 1000);
+    return wait;
+}
+
+// Poll the TfL bus feed once and publish the result. Returns how long to wait.
+static uint32_t fetchBusesOnce() {
+    std::vector<BusArrival> arrivals;
+    String stopName;
+    bus::Fetch st = bus::fetchArrivals(cfg::get(), arrivals, stopName);
+    bool ok = (st == bus::Fetch::Ok);
+
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    if (ok) {
+        g_bus = arrivals;
+        g_busStopName = stopName;
+        g_busErrCount = 0;
+        g_badStop = false;
+        g_busHaveData = true;
+        g_busFetchedMs = millis();
+    } else if (st == bus::Fetch::BadStop) {
+        g_badStop = true;        // config error — drop the bus screen entirely
+        g_busHaveData = false;
+        g_busErrCount = 0;
+    } else {
+        g_busErrCount++;         // keep last-good arrivals on screen (stale)
+        g_badStop = false;
+    }
+    g_busEpoch++;
+    int fails = g_busErrCount;
+    xSemaphoreGive(g_mutex);
+
+    if (ok) {
+        Serial.printf("[bus] ok: %d arrivals at %s\n", (int)arrivals.size(), stopName.c_str());
+        return BUS_REFRESH_SECONDS * 1000UL;
+    }
+    if (st == bus::Fetch::BadStop) {
+        Serial.printf("[bus] unknown stop code '%s' - bus screen disabled until reconfigured\n",
+                      cfg::get().bus_stop.c_str());
+        return 300000;   // a wrong code will not fix itself; check back rarely
+    }
+    uint32_t wait = backoffMs(fails);
+    Serial.printf("[bus] failed (%d) - retry in %us\n", fails, wait / 1000);
+    return wait;
+}
+
 static void fetchTask(void*) {
+    // Signed deadline comparisons, so the scheduler survives millis() wrapping.
+    uint32_t nextTrain = millis();
+    uint32_t nextBus = millis();
+
     for (;;) {
         if (WiFi.status() != WL_CONNECTED) connectWiFi();
 
-        std::vector<Departure> deps;
-        String station, calling;
-        rail::Fetch st = rail::fetchDepartures(cfg::get(), deps, station, calling);
-        bool ok = (st == rail::Fetch::Ok);
-
-        xSemaphoreTake(g_mutex, portMAX_DELAY);
-        if (ok) {
-            g_deps = deps;
-            g_station = station;
-            g_callingAt = calling;
-            g_errCount = 0;
-            g_badStation = false;
-        } else if (st == rail::Fetch::BadStation) {
-            g_badStation = true;   // config error — show a dedicated screen
-            g_errCount = 0;        // not a connectivity problem
-        } else {
-            g_errCount++;          // keep last-good g_deps on screen (stale)
-            g_badStation = false;
+        if ((int32_t)(millis() - nextTrain) >= 0) {
+            nextTrain = millis() + fetchTrainsOnce();
         }
-        g_epoch++;
-        int fails = g_errCount;
-        xSemaphoreGive(g_mutex);
-
-        if (ok) {
-            Serial.printf("[fetch] ok: %d departures for %s\n", (int)deps.size(), station.c_str());
-            uint32_t wait_ms = (uint32_t)cfg::get().refresh * 1000;
-            vTaskDelay(pdMS_TO_TICKS(wait_ms ? wait_ms : 60000));
-        } else if (st == rail::Fetch::BadStation) {
-            Serial.printf("[fetch] invalid station '%s' - reconfigure via installer\n",
-                          cfg::get().dep_crs.c_str());
-            vTaskDelay(pdMS_TO_TICKS(30000));   // don't hammer a doomed request
-        } else {
-            uint32_t wait = backoffMs(fails);
-            Serial.printf("[fetch] failed (%d) - retry in %us\n", fails, wait / 1000);
-            vTaskDelay(pdMS_TO_TICKS(wait));
+        if (cfg::get().bus_enabled() && (int32_t)(millis() - nextBus) >= 0) {
+            nextBus = millis() + fetchBusesOnce();
         }
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
 
@@ -163,6 +238,17 @@ void setup() {
     xTaskCreatePinnedToCore(fetchTask, "fetch", 16384, nullptr, 1, nullptr, 0);
 }
 
+// ---------------------------------------------------------------------------
+// Screen rotation
+//
+// With no bus stop configured the board is exactly what it always was: trains,
+// permanently. Once a stop is configured *and* TfL has answered for it at least
+// once, the board alternates train (30s) -> bus (15s) -> train (30s) -> ...
+// A stop code TfL rejects never earns a slot, so a typo costs the user nothing
+// more than the trains they already had.
+// ---------------------------------------------------------------------------
+enum class Screen { Train, Bus };
+
 void loop() {
     cfg::poll_serial();  // allow reconfiguration at any time (COMMIT reboots)
 
@@ -171,6 +257,13 @@ void loop() {
     static String station, calling;
     static int err = 0;
     static bool badStation = false;
+
+    static uint32_t lastBusEpoch = 0xFFFFFFFF;
+    static std::vector<BusArrival> bus;
+    static String busStop;
+    static int busErr = 0;
+    static bool busReady = false;
+    static uint32_t busFetchedMs = 0;
 
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     uint32_t epoch = g_epoch;
@@ -182,6 +275,15 @@ void loop() {
         calling = g_callingAt;
         lastEpoch = epoch;
     }
+    uint32_t busEpoch = g_busEpoch;
+    busErr = g_busErrCount;
+    busReady = g_busHaveData;
+    busFetchedMs = g_busFetchedMs;
+    if (busEpoch != lastBusEpoch) {
+        bus = g_bus;
+        busStop = g_busStopName;
+        lastBusEpoch = busEpoch;
+    }
     xSemaphoreGive(g_mutex);
 
     if (isBlankHour()) {
@@ -190,7 +292,29 @@ void loop() {
         return;
     }
 
-    if (badStation) {
+    // Decide which screen this frame belongs to.
+    static Screen screen = Screen::Train;
+    static uint32_t screenSince = 0;
+    static bool timerStarted = false;
+    if (!timerStarted) { screenSince = millis(); timerStarted = true; }
+
+    bool showBus = cfg::get().bus_enabled() && busReady;
+    if (!showBus) {
+        if (screen != Screen::Train) { screen = Screen::Train; ui::resetScroll(); }
+        screenSince = millis();   // hold the clock at zero while there is no bus screen
+    } else {
+        uint32_t dwell = (screen == Screen::Bus ? BUS_SCREEN_SECONDS : TRAIN_SCREEN_SECONDS) * 1000UL;
+        if (millis() - screenSince >= dwell) {
+            screen = (screen == Screen::Train) ? Screen::Bus : Screen::Train;
+            screenSince = millis();
+            ui::resetScroll();    // long names restart rather than resume mid-scroll
+        }
+    }
+
+    if (screen == Screen::Bus) {
+        ui::renderBusBoard(bus, busStop, cfg::get().bus_line,
+                           millis() - busFetchedMs, busErr);
+    } else if (badStation) {
         ui::renderError("Unknown station", cfg::get().dep_crs);
     } else {
         String label = station.length() ? station : cfg::get().dep_crs;

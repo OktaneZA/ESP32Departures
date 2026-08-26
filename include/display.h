@@ -23,6 +23,17 @@ void showStartup(const char* line1, const char* line2);
 void renderBoard(const std::vector<Departure>& deps, const String& station,
                  const String& callingAt, int errCount);
 
+// Render one full frame of the London bus arrivals screen — the second screen
+// the board cycles to when a bus stop is configured. Call ~30x/sec like
+// renderBoard(); `sinceFetchMs` is how long ago the arrivals were fetched, so
+// the "N min" countdown ticks down live between polls.
+void renderBusBoard(const std::vector<BusArrival>& arrivals, const String& stopName,
+                    const String& lineFilter, uint32_t sinceFetchMs, int errCount);
+
+// Reset the horizontal marquees so a screen that has just come back into view
+// starts its long names from the beginning rather than mid-scroll.
+void resetScroll();
+
 // Dedicated screen after repeated fetch failures (network clearly down).
 void renderConnectivityWarning(const String& station, int errCount);
 

@@ -8,12 +8,14 @@
 //   CFG <key>=<value>    -> ACK <key>        (stages a value)
 //   COMMIT               -> SAVED, then reboots into the new config
 //   GET                  -> key=value lines (secrets masked), then END
+//   SCAN                 -> WiFi networks the board can actually see, then END
 //
-// Keys: ssid pass key dep dest plat bstart bend bright refr
+// Keys: ssid pass key dep dest plat tz bus busline bstart bend bright refr
 
 #include "config.h"
 #include "app_config.h"   // compile-time defaults
 #include <Preferences.h>
+#include <WiFi.h>
 
 namespace {
 
@@ -34,6 +36,8 @@ void load_from_nvs(Config& c) {
     c.dest_crs    = prefs.getString("dest", "");
     c.platform    = prefs.getString("plat", "");
     c.tz          = prefs.getString("tz",   "");
+    c.bus_stop    = prefs.getString("bus",  "");
+    c.bus_line    = prefs.getString("busln", "");
     c.blank_start = prefs.getInt("bstart", -1);
     c.blank_end   = prefs.getInt("bend",   -1);
     c.brightness  = prefs.getInt("bright", BRIGHTNESS);
@@ -55,6 +59,8 @@ void stage_kv(const String& kv) {
     else if (k == "dest")   g_stage.dest_crs   = v;
     else if (k == "plat")   g_stage.platform   = v;
     else if (k == "tz")     g_stage.tz         = v;
+    else if (k == "bus")    g_stage.bus_stop   = v;
+    else if (k == "busline") g_stage.bus_line  = v;
     else if (k == "bstart") g_stage.blank_start = v.toInt();
     else if (k == "bend")   g_stage.blank_end   = v.toInt();
     else if (k == "bright") g_stage.brightness  = v.toInt();
@@ -74,6 +80,8 @@ void commit_and_reboot() {
     prefs.putString("dest", g_stage.dest_crs);
     prefs.putString("plat", g_stage.platform);
     prefs.putString("tz",   g_stage.tz);
+    prefs.putString("bus",  g_stage.bus_stop);
+    prefs.putString("busln", g_stage.bus_line);
     prefs.putInt("bstart", g_stage.blank_start);
     prefs.putInt("bend",   g_stage.blank_end);
     prefs.putInt("bright", g_stage.brightness);
@@ -83,6 +91,42 @@ void commit_and_reboot() {
     Serial.flush();
     delay(300);
     ESP.restart();
+}
+
+// Short label for an AP's security mode, for the SCAN diagnostic.
+const char* auth_name(int mode) {
+    switch (mode) {
+        case WIFI_AUTH_OPEN:            return "open";
+        case WIFI_AUTH_WEP:             return "WEP";
+        case WIFI_AUTH_WPA_PSK:         return "WPA";
+        case WIFI_AUTH_WPA2_PSK:        return "WPA2";
+        case WIFI_AUTH_WPA_WPA2_PSK:    return "WPA/WPA2";
+        case WIFI_AUTH_WPA2_ENTERPRISE: return "WPA2-ent";
+        case WIFI_AUTH_WPA3_PSK:        return "WPA3";
+        case WIFI_AUTH_WPA2_WPA3_PSK:   return "WPA2/WPA3";
+        case WIFI_AUTH_WAPI_PSK:        return "WAPI";
+        default:                        return "?";
+    }
+}
+
+// List every AP the radio can see. The ESP32-S3 has no 5 GHz radio, so a network
+// that is missing here but visible on a phone is almost always 5 GHz-only - the
+// single most common reason a board will not connect.
+void scan_networks() {
+    Serial.println("scanning...");
+    WiFi.mode(WIFI_STA);
+    int n = WiFi.scanNetworks();
+    if (n <= 0) {
+        Serial.println("no networks found");
+    } else {
+        for (int i = 0; i < n; ++i) {
+            Serial.printf("%s|rssi=%d|ch=%d|auth=%s\n",
+                          WiFi.SSID(i).c_str(), WiFi.RSSI(i),
+                          WiFi.channel(i), auth_name(WiFi.encryptionType(i)));
+        }
+    }
+    WiFi.scanDelete();
+    Serial.println("END");
 }
 
 void handle_line(String line) {
@@ -95,12 +139,23 @@ void handle_line(String line) {
         stage_kv(line.substring(4));
     } else if (line == "COMMIT") {
         commit_and_reboot();  // does not return
+    } else if (line == "SCAN") {
+        scan_networks();
     } else if (line == "GET") {
         Serial.print("dep=");    Serial.println(g_cfg.dep_crs);
         Serial.print("dest=");   Serial.println(g_cfg.dest_crs);
         Serial.print("plat=");   Serial.println(g_cfg.platform);
+        Serial.print("bus=");    Serial.println(g_cfg.bus_stop);
+        Serial.print("busline="); Serial.println(g_cfg.bus_line);
         Serial.print("ssid=");   Serial.println(g_cfg.wifi_ssid);
+        // Length only, never the password itself - enough to tell an empty or
+        // truncated password from a wrong one without leaking it.
+        Serial.print("passlen="); Serial.println(g_cfg.wifi_pass.length());
+        Serial.print("bstart="); Serial.println(g_cfg.blank_start);
+        Serial.print("bend=");   Serial.println(g_cfg.blank_end);
         Serial.print("bright="); Serial.println(g_cfg.brightness);
+        Serial.print("refr=");   Serial.println(g_cfg.refresh);
+        Serial.print("wifi=");   Serial.println(WiFi.status() == WL_CONNECTED ? "up" : "down");
         Serial.print("prov=");   Serial.println(g_cfg.provisioned() ? 1 : 0);
         Serial.println("END");
     } else {

@@ -32,6 +32,10 @@ running on a T-Display-S3 in a standard case.*
 ## What it does
 
 - Live departures for a station (optionally filtered to a destination or platform)
+- **Optional London bus screen:** live arrivals for one bus stop from TfL's open
+  Countdown feed. With a stop configured the board cycles trains for 30s, then
+  buses for 15s, and back — route number, destination, and a "Due" / "N min"
+  countdown that ticks between polls
 - Top three departures shown large: time + destination, with status
   (delay/cancellation) and platform when relevant; long names scroll
 - Big NTP clock in a dot-matrix font, with automatic BST
@@ -90,6 +94,7 @@ into `installer/firmware/` and run `installer/build_exe.py`.
 | blank hours (DISP-05)                   | `isBlankHour()`                              |
 | config file + install.sh                | on-device NVS + USB installer (`config.cpp`) |
 | PIL dot-matrix TTF fonts                | dot-matrix clock via `docs/ttf_to_lgfx.py` (rows use FreeSans) |
+| (no bus support)                        | optional TfL bus screen (`bus_api.cpp`), cycled from `loop()` |
 
 ## Project layout
 
@@ -101,11 +106,12 @@ firmware/esp32-tdisplay-s3/
 │   ├── app_config.h          compile-time tunables
 │   ├── config.h              on-device (NVS) runtime config
 │   ├── dotmatrix_fonts.h     generated dot-matrix font (clock)
-│   ├── model.h / rail_api.h / display.h
+│   ├── model.h / rail_api.h / bus_api.h / display.h
 ├── src/
 │   ├── main.cpp              WiFi, NTP, fetch task, render loop
 │   ├── config.cpp            NVS config + USB-serial provisioning
 │   ├── rail_api.cpp          National Rail LDBWS REST/JSON client
+│   ├── bus_api.cpp           TfL live bus arrivals (Countdown/URA) client
 │   └── display.cpp           LovyanGFX panel config + rendering
 ├── docs/                     board mockups + font-conversion script
 └── installer/                self-contained Windows installer (.exe)
@@ -124,3 +130,11 @@ firmware/esp32-tdisplay-s3/
   root CA and switch to `client.setCACert(...)` (a hook is already in place).
 - **Calling points** arrive in the same response but aren't shown in the current
   top-three layout (`FETCH_CALLING_POINTS 0`).
+- **London buses** come from TfL's
+  [Live Bus & River Bus Arrivals API](https://content.tfl.gov.uk/tfl-live-bus-river-bus-arrivals-api-documentation.pdf)
+  (the Countdown "URA" feed), which needs no key. Its responses are one JSON
+  array per line, and fields come back in the spec's own sequence order rather
+  than the order requested — `bus_api.cpp` documents the exact shape it relies
+  on, and `RAW_BUS_DEBUG` in `app_config.h` prints raw lines to check it.
+  Screen timings are `TRAIN_SCREEN_SECONDS` / `BUS_SCREEN_SECONDS`.
+  Data provided by Transport for London.

@@ -2,8 +2,8 @@
 
 A self-contained **Windows 10/11** installer for the LilyGo T-Display-S3 departure
 board. It flashes the firmware and configures it (WiFi, National Rail LDBWS key,
-station, filters, blank hours, brightness) over USB — **no Python, PlatformIO, or
-toolchain needed** on the target PC.
+station, filters, an optional London bus stop, blank hours, brightness) over USB
+— **no Python, PlatformIO, or toolchain needed** on the target PC.
 
 *Part of Esp32Departures, derived from
 [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display).*
@@ -62,13 +62,26 @@ The board needs a free API key for live departure data:
 3. Follow the prompts (it auto-detects the board's COM port).
 4. When it says *Done*, the board reboots and shows live departures.
 
-To change stations or settings later, just run it again and pick **Configure only**
-(no re-flash needed — settings are stored on the device).
+If the board is already set up, it tells you what it is set to and offers three
+choices:
+
+| | What it does |
+|---|---|
+| **[C] Change settings** | Keeps the firmware, walks the prompts (all pre-filled from the board) |
+| **[U] Update firmware only** | Asks nothing at all — flashes new firmware and keeps every setting |
+| **[F] Update firmware AND change settings** | Both |
+
+**You never have to retype your WiFi password or API key.** They are the only two
+things the board will not read back, so their prompts accept a blank answer
+meaning *keep the one already on the board*. Everything else — station, bus stop,
+blank hours, brightness — is pre-filled with what the board is currently using,
+so pressing Enter through the whole wizard changes nothing.
 
 ### What you'll be asked
 - WiFi network + password (2.4 GHz only — the ESP32-S3 has no 5 GHz radio)
 - LDBWS API key (your consumer key from [raildata.org.uk](https://raildata.org.uk))
 - Departure station CRS (e.g. `MOT`), optional destination + platform filters
+- **Whether to add a London bus stop** (see below) — just press Enter to skip
 - Optional screen-blank hours, brightness, refresh interval
 - Timezone — **auto-detected from your PC's locale** (just press Enter to accept)
 
@@ -81,6 +94,49 @@ The installer also **checks your station code and key against the API** before
 configuring, and re-prompts if either is rejected — so a typo'd station is caught
 up front. (If the code is wrong anyway, the board itself shows an "Unknown station"
 screen rather than a blank error.)
+
+## Adding a London bus stop (optional)
+
+The board can cycle to a second screen showing live bus arrivals: **trains for
+30 seconds, then your bus stop for 15 seconds**, over and over. It uses TfL's
+open Countdown data, so there is **no extra API key to get** — but it only
+covers **London** buses (and TfL river bus piers).
+
+The installer asks *"Add a London bus stop?"* and, if you say yes, one prompt
+finds the stop for you — you don't need to know any codes. Type whichever you
+have and it works out which is which:
+
+- a **postcode** — `KT3 6PF`
+- a **place or stop name** — `Green Park Station`
+- the **5-digit code** printed on the stop itself — `52053`
+
+You then get a numbered list of nearby stops **with the direction each one
+serves**, so you can pick the right side of the road:
+
+```
+  Where is your stop? Enter a postcode (e.g. 'KT3 6PF'), a place
+  name (e.g. 'Green Park Station'), or the 5-digit code on the stop.
+  Postcode / place / code (blank to skip): KT3 6PF
+
+  Bus stops near KT3 6PF:
+    [0] Hail & Ride Motspur Park / W Barnes Lane  -  63m  -  (hail & ride)
+    [1] Motspur Park Station (B)  -  308m  -  towards New Malden
+    [2] Motspur Park Station (A)  -  367m  -  towards Raynes Park
+    [s] Search somewhere else
+  Choose a stop [0]:
+```
+
+You can then optionally **limit the screen to a single route** (e.g. just the
+`38`), and the installer prints the next few buses so you can confirm you picked
+the right stop before it writes anything to the board. Leaving the search prompt
+blank skips the bus screen entirely.
+
+To turn the bus screen off later, re-run the installer, choose **Change
+settings**, and answer `n` to the bus question. (Pressing Enter at the stop
+search keeps the stop you already have.)
+
+> Buses outside London aren't covered — the feed is TfL's. Bus data provided by
+> Transport for London.
 
 ## How it works
 
@@ -110,7 +166,9 @@ python installer.py --auto cfg.json
 ```
 
 where `cfg.json` has `port`, `flash`, and the settings keys
-(`ssid pass key dep dest plat bstart bend bright refr`).
+(`ssid pass key dep dest plat tz bus busline bstart bend bright refr`).
+`bus` is the stop's 5-digit code and `busline` an optional route filter; leave
+`bus` empty for a train-only board.
 
 ## Notes
 

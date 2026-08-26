@@ -8,6 +8,9 @@ directly from the National Rail Live Departure Board (LDBWS) JSON API and render
 them on the board's built-in 170×320 colour LCD — no host computer, server, or
 cloud service.
 
+Optionally it also shows **live London bus arrivals** for one bus stop, taken
+from TfL's open Countdown feed, cycling between the two boards.
+
 This document is a **retrospective** specification: it records the requirements
 the delivered firmware and installer actually satisfy.
 
@@ -105,6 +108,40 @@ Incompatible look-alikes (different display/driver): T-Display-S3 **AMOLED**
 
 ---
 
+## 3a. Data Source — TfL Live Bus & River Bus Arrivals (optional)
+
+Used only when the user configures a bus stop. Sourced from TfL's Countdown
+system via the "URA" instant interface, documented in
+[TfL's Live Bus & River Bus Arrivals API interface spec](https://content.tfl.gov.uk/tfl-live-bus-river-bus-arrivals-api-documentation.pdf).
+
+| Item | Detail |
+|---|---|
+| **API** | TfL Live Bus & River Bus Arrivals (Countdown / URA) |
+| **Endpoint** | `https://countdown.api.tfl.gov.uk/interfaces/ura/instant_V1` |
+| **Protocol** | HTTPS; one JSON array per line (deliberately *not* a JSON document) |
+| **Authentication** | **None** — the feed is open, no key or registration |
+| **Query params** | `StopCode1` (5-digit SMS stop code), optional `LineName`, `ReturnList`, `Circle` (stop search) |
+| **Data returned** | Route, destination, absolute arrival time (Unix epoch ms, UTC) |
+| **Coverage** | London buses and TfL river bus piers only |
+| **Polling interval** | 30 s (the feed is cached at source for 30 s; polling faster returns identical data) |
+| **Attribution** | "Data provided by Transport for London" — and applications must not imply they are official TfL apps |
+
+| ID | Requirement |
+|---|---|
+| BUS-01 | HTTPS enforced for the TfL endpoint; no HTTP fallback |
+| BUS-02 | Response parsed **line by line**, each line a JSON array whose first element is the array type (4 = URA version, 1 = prediction) |
+| BUS-03 | Fields are read by the **documented sequence order**, not the `ReturnList` order — the feed reorders them |
+| BUS-04 | Arrival countdowns computed against the feed's own timestamp (first line), so they stay correct even if the board's clock is wrong |
+| BUS-05 | `ReturnList` kept to the five fields actually rendered, per TfL's guidance; `ExpireTime` requested alongside `EstimatedTime` as the spec requires |
+| BUS-06 | Predictions arrive unordered and are sorted soonest-first before display |
+| BUS-07 | The response is read with a bounded line buffer and a total byte cap (`BUS_MAX_RESPONSE`), so a malformed or huge response cannot exhaust the heap |
+| BUS-08 | HTTP/1.0 is requested so the server returns an unchunked body, which the bounded line reader can consume directly |
+| BUS-09 | An unknown stop code (HTTP 416) is a configuration error: logged once, retried only every 5 minutes, and the bus screen is withheld entirely |
+| BUS-10 | Zero arrivals is a valid result ("No buses due"), not a fetch failure |
+| BUS-11 | `RAW_BUS_DEBUG` build flag dumps the raw response lines for field verification |
+
+---
+
 ## 4. Configuration (on-device)
 
 Settings are stored in NVS (namespace `esp32dep`) and set by the installer over
@@ -120,6 +157,8 @@ generic and shareable.
 | `dest` | No | — | Destination filter CRS (empty = all) |
 | `plat` | No | — | Platform filter (empty = all) |
 | `tz` | No | UK | POSIX timezone string; the installer sets it from the PC's locale |
+| `bus` | No | - | TfL bus stop SMS code (empty = no bus screen at all) |
+| `busline` | No | - | Bus route filter, e.g. `38` (empty = every route at the stop) |
 | `bstart` | No | `-1` | Screen-blank start hour (−1 = off) |
 | `bend` | No | `-1` | Screen-blank end hour (−1 = off) |
 | `bright` | No | `180` | Backlight brightness (0–255) |
@@ -131,6 +170,7 @@ generic and shareable.
 | CFG-02 | Device is "provisioned" only when `ssid`, `key`, and `dep` are all set |
 | CFG-03 | Until provisioned, an "Awaiting setup" screen is shown and normal operation is suspended |
 | CFG-04 | Reconfiguration is possible at any time over serial without re-flashing |
+| CFG-05 | The bus screen is opt-in: with `bus` empty the firmware never contacts TfL and behaves exactly as the train-only board |
 
 ---
 
@@ -139,6 +179,8 @@ generic and shareable.
 | ID | Requirement |
 |---|---|
 | DISP-01 | Show up to 3 next departures on the 320×170 canvas |
+| DISP-18 | Both boards share one layout: a header row (mode tag + station/stop name), three identical rows, then the clock |
+| DISP-19 | All three rows use the same font; times and statuses use the smaller font, vertically centred, so the destination column gets the width |
 | DISP-02 | Each row: scheduled time, destination, and service status (expected/on-time/cancelled) with platform when present |
 | DISP-03 | A destination too wide for its column scrolls horizontally, clipped so it never overwrites the status |
 | DISP-04 | `HIDE_ONTIME_STATUS` build option: hide "On time" to give destinations the full width |
@@ -149,6 +191,12 @@ generic and shareable.
 | DISP-09 | Flicker-free rendering via a full-frame PSRAM sprite back-buffer at ~30 fps |
 | DISP-10 | Clock time from NTP; timezone from the provisioned POSIX `tz` (set from the user's PC locale), falling back to UK. Set via `configTzTime` so DST applies |
 | DISP-11 | An invalid departure CRS (API returns HTTP 400) shows a dedicated red "Unknown station" screen, not a generic connectivity error |
+| DISP-12 | With a bus stop configured, the board cycles **trains for 30 s, then buses for 15 s**, repeating (`TRAIN_SCREEN_SECONDS` / `BUS_SCREEN_SECONDS`) |
+| DISP-13 | The bus screen shows up to 3 arrivals laid out like a train row: expected time, route number, destination, and a right-aligned countdown ("Due" under a minute, otherwise "N min") |
+| DISP-17 | The header shows the station/stop name in the large font, with a small dim "TRAIN" / "BUS" (or "BUS <route>") tag beside it |
+| DISP-14 | Bus countdowns tick down live between polls rather than freezing for the 30 s poll interval |
+| DISP-15 | The bus screen is only entered once TfL has answered successfully for the stop at least once; an unconfigured or rejected stop leaves the train board permanently on screen |
+| DISP-16 | Marquees reset on every screen change, so long names restart rather than resuming mid-scroll |
 
 ---
 
@@ -177,7 +225,10 @@ PyInstaller) that flashes the firmware and provisions the board.
 | INST-01 | Single `.exe`; bundles firmware binaries, esptool, and pyserial — no Python/toolchain on the target PC |
 | INST-02 | Auto-detects the board's COM port (prefers Espressif VID 0x303A); prompts if several devices |
 | INST-03 | Console wizard prompts for all settings with sensible defaults; WiFi password entry hidden |
-| INST-04 | Detects existing Esp32Departures firmware and offers **Configure only** (no re-flash) |
+| INST-04 | Detects existing Esp32Departures firmware and offers three paths: change settings only, **update firmware only** (asks nothing, keeps all settings), or both |
+| INST-10 | The wizard pre-fills every prompt from the board's current config, read back over `GET` |
+| INST-11 | The WiFi password and API key — the only two values the board will not read back — accept a blank answer meaning "keep"; `provision()` then omits that key so the firmware's COMMIT preserves it |
+| INST-12 | Re-flashing the app does not disturb settings: they live in a separate NVS partition |
 | INST-05 | Flashes bootloader (0x0), partitions (0x8000), boot_app0 (0xe000), firmware (0x10000) via esptool |
 | INST-06 | After flashing, re-detects the (possibly re-enumerated) port before provisioning |
 | INST-07 | Provisions over serial using the PROV protocol; confirms `SAVED` |
@@ -201,6 +252,9 @@ PyInstaller) that flashes the firmware and provisions the board.
 | ARCH-09 | Serial provisioning polled from the main loop and during WiFi waits, so the board stays responsive |
 | ARCH-10 | An invalid station (HTTP 400) is treated as a configuration error, not a transient one: dedicated error screen and a slow 30s retry rather than exponential-backoff hammering |
 | ARCH-11 | The installer verifies the station + key against the API before provisioning and re-prompts on rejection |
+| ARCH-12 | Both feeds are polled from the **one** fetch task on independent deadlines — a second task would need its own 16 KB TLS stack for no benefit |
+| ARCH-13 | The scheduler compares deadlines as signed differences, so it survives `millis()` wrapping |
+| ARCH-14 | The bus feed has its own error counter and back-off, independent of the rail feed |
 
 ---
 
@@ -214,6 +268,8 @@ PyInstaller) that flashes the firmware and provisions the board.
 | SEC-04 | No credentials committed to source; `secrets.h` is git-ignored and unused at runtime |
 | SEC-05 | Installer keeps entered secrets in memory only; nothing written to disk on the target PC |
 | SEC-06 | TLS server-certificate verification is a documented hardening option (`setCACert`); default `setInsecure()` is called out as a trade-off |
+| SEC-07 | The TfL request carries no credentials of any kind, so nothing sensitive is exposed by it |
+| SEC-08 | The bus stop code and route filter are percent-encoded into the query string, so a stray character cannot alter the request |
 
 ---
 
@@ -230,6 +286,8 @@ PyInstaller) that flashes the firmware and provisions the board.
 ## 11. Out of Scope
 
 - Journey planning, ticket purchasing, arrivals boards
+- Buses outside London (the TfL feed is London-only)
+- More than one bus stop, or TfL's streaming interface (which needs authentication)
 - 5 GHz WiFi (unsupported by the ESP32-S3 radio)
 - macOS / Linux installer builds (firmware is cross-platform buildable; the packaged installer targets Windows)
 - OTA firmware updates (re-flash via the installer)

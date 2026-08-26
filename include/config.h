@@ -12,6 +12,8 @@ struct Config {
     String dest_crs;     // optional destination filter CRS ("" = all)
     String platform;     // optional platform filter ("" = all)
     String tz;           // POSIX TZ string ("" = firmware default, UK)
+    String bus_stop;     // optional TfL bus stop SMS code ("" = bus screen off)
+    String bus_line;     // optional bus route filter, e.g. "38" ("" = all routes)
     int    blank_start = -1;   // screen-blank start hour (-1 = off)
     int    blank_end   = -1;   // screen-blank end hour (-1 = off)
     int    brightness  = 180;  // 0-255
@@ -20,6 +22,10 @@ struct Config {
     bool provisioned() const {
         return wifi_ssid.length() && api_key.length() && dep_crs.length();
     }
+
+    // True when the user asked for the London bus screen. The TfL feed needs no
+    // key of its own, so a stop code is the only thing that enables it.
+    bool bus_enabled() const { return bus_stop.length() > 0; }
 };
 
 namespace cfg {
