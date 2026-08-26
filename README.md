@@ -1,8 +1,8 @@
-# Esp32Departures — UK Train Departure Display (LilyGo T-Display-S3)
+# Esp32Departures — UK Train & Bus Departure Display (LilyGo T-Display-S3)
 
 A C++/JSON rewrite of the [Raspberry Pi departure board](https://github.com/OktaneZA/PiDepartures) for the
 **LilyGo T-Display-S3** (ESP32-S3, 1.9″ 170×320 ST7789 LCD). No Pi, no Docker, no
-server — the ESP32 fetches live UK departures over WiFi and drives the built-in
+server — the ESP32 fetches live UK train and now bus departures over WiFi and drives the built-in
 colour LCD directly. The aim was to make this even simpler and cheaper than previous iterations. £10 + some 
 effort and you can have this running.
 
@@ -22,7 +22,7 @@ replaced it.)
 
 ![Live departure board running on the LilyGo T-Display-S3](docs/Esp32-2.jpg)
 
-*Live departures for Motspur Park — bold first row, per-train status
+*Live departures for local station — bold first row, per-train status
 ("On time" / "Delayed"), scrolling long destinations, and a dot-matrix clock,
 running on a T-Display-S3 in a standard case.*
 
@@ -32,7 +32,8 @@ running on a T-Display-S3 in a standard case.*
 
 ## What it does
 
-- Live departures for a station (optionally filtered to a destination or platform)
+- Live departures for a local train station (optionally filtered to a destination or platform)
+- Live London bus departures for local bus stops
 - Top three departures shown large: time + destination, with status
   (delay/cancellation) and platform when relevant; long names scroll
 - Big NTP clock in a dot-matrix font, with automatic BST
