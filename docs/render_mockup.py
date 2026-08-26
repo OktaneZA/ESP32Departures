@@ -1,12 +1,16 @@
-"""Render pixel-accurate mockups of the T-Display-S3 departure board.
+"""Render pixel-accurate mockups of the T-Display-S3 board, trains and buses.
 
-Mirrors src/display.cpp (320x170 landscape, amber-on-black): FreeSans (approx.
-by Arial) for the train rows, dot-matrix for the clock. Documentation aid only.
-Scaled 4x for legibility.
+Mirrors src/display.cpp (320x170 landscape, amber-on-black), including its shared
+layout: FreeSans (approximated by Arial) for the header and rows, dot-matrix for
+the clock, and the same row geometry constants. Documentation aid only, so layout
+changes can be checked without flashing a board. Scaled 4x for legibility.
 
-  mockup-mot.png          live Motspur Park data
-  mockup-scroll-demo.png  delayed + cancelled example (long name scrolls past status)
-  mockup-bus.png          the London bus arrivals screen
+Run it with no arguments to regenerate all four:
+
+  mockup-mot.png          train board, live Motspur Park data
+  mockup-scroll-demo.png  train board, delayed + cancelled, long name clipped
+  mockup-bus.png          London bus arrivals screen
+  mockup-bus-busy.png     bus screen with a destination too long for its column
 """
 
 from datetime import datetime

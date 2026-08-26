@@ -17,9 +17,10 @@ void renderSetup();
 // Splash while WiFi/NTP come up.
 void showStartup(const char* line1, const char* line2);
 
-// Render one full frame of the departure board. Call ~30x/sec — the scrolling
-// "Calling at:" line and the clock advance per frame. `errCount` > 0 overlays a
+// Render one full frame of the train departure board. Call ~30x/sec — the clock
+// and any scrolling destination advance per frame. `errCount` > 0 overlays a
 // stale-data "No signal" indicator (the caller keeps passing the last good data).
+// `callingAt` is accepted but not drawn by the current layout.
 void renderBoard(const std::vector<Departure>& deps, const String& station,
                  const String& callingAt, int errCount);
 

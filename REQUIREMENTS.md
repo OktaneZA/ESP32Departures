@@ -34,6 +34,8 @@ the delivered firmware and installer actually satisfy.
   (the legacy SOAP token no longer works; RTT's API is also being retired).
 - Configuration stored **on-device (NVS)** and set over USB serial by a bundled
   **Windows `.exe` installer** — one pre-built binary serves every user.
+- **A second, optional screen** the board cycles to: live London bus arrivals
+  from TfL's open Countdown feed. The Pi version has no equivalent.
 
 ---
 
@@ -82,6 +84,19 @@ Incompatible look-alikes (different display/driver): T-Display-S3 **AMOLED**
 | Flashing | `esptool` ≥ 4.7, < 5 |
 | Serial | `pyserial` 3.x |
 | Packaging | `pyinstaller` (one-file exe) |
+| Timezone | `tzlocal` + `tzdata` (optional; detects the PC's POSIX TZ) |
+
+The installer reaches three services, all keyless and all on the user's PC only:
+the TfL Countdown feed (verifying a bus stop and searching for one), TfL's
+StopPoint search and postcodes.io (turning a name or postcode into coordinates),
+and the LDBWS endpoint (verifying the station and API key).
+
+**Documentation tooling** (`docs/`, not required to build or run):
+
+| Component | Purpose |
+|---|---|
+| `render_mockup.py` (Pillow) | Pixel-accurate renders of both boards, mirroring `display.cpp` |
+| `ttf_to_lgfx.py` | Converts the dot-matrix TTFs to an `lgfx::GFXfont` header |
 
 ---
 

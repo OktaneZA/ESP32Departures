@@ -1,10 +1,15 @@
 // Display + rendering for the LilyGo T-Display-S3 (ST7789, 170x320, 8-bit i80).
 //
 // Uses LovyanGFX with a full-frame sprite in PSRAM as a back buffer so the
-// scrolling calling-points line and ticking clock render without flicker.
+// scrolling destinations and ticking clock render without flicker.
 //
 // Layout is landscape 320x170 (rotation 1) — a wide "platform sign" shape,
 // reimagining the Python app's 256x64 board with room for a big clock.
+//
+// Two boards are drawn here — trains and London buses — and they deliberately
+// share one layout: a header row (mode tag + station/stop name), three identical
+// rows, then the clock. The shared geometry constants and drawHeader() below are
+// what keep them from drifting apart.
 
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
