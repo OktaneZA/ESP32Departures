@@ -1,9 +1,10 @@
-# Esp32Departures — UK Train Departure Display (LilyGo T-Display-S3)
+# Esp32Departures — UK Train & London Bus Board (LilyGo T-Display-S3)
 
 A C++/JSON rewrite of the [Raspberry Pi departure board](https://github.com/OktaneZA/PiDepartures) for the
 **LilyGo T-Display-S3** (ESP32-S3, 1.9″ 170×320 ST7789 LCD). No Pi, no Docker, no
-server — the ESP32 fetches live UK departures over WiFi and drives the built-in
-colour LCD directly.
+server — the ESP32 fetches live UK train departures over WiFi and drives the
+built-in colour LCD directly. Optionally it also shows **live London bus
+arrivals** for one stop, cycling between the two boards.
 
 > **Credits.** Derived from Chris Crocker-White's
 > [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display)
@@ -19,15 +20,27 @@ replaced it.)
 
 ## What it looks like
 
-![Live departure board running on the LilyGo T-Display-S3](docs/Esp32-2.jpg)
+Both boards share one layout: a header row naming the mode and the station or
+stop, three rows, then the clock.
 
-*Live departures for Motspur Park — bold first row, per-train status
-("On time" / "Delayed"), scrolling long destinations, and a dot-matrix clock,
-running on a T-Display-S3 in a standard case.*
+![Train departure board](docs/mockup-scroll-demo.png)
 
-![Welcome screen shown while data loads](docs/Esp32-1.jpg)
+*Departures for Motspur Park — per-train status ("On time" / "Exp HH:MM" /
+"Cancelled" in red), platform when present, and long destinations that scroll.*
 
-*The welcome screen shown while the first departures are fetched.*
+![London bus arrivals board](docs/mockup-bus.png)
+
+*The bus screen — expected time, route number, destination, and a countdown
+that ticks down between polls.*
+
+(Both rendered by `docs/render_mockup.py`, which mirrors `src/display.cpp`
+pixel-for-pixel.)
+
+![The board running on a LilyGo T-Display-S3](docs/Esp32-2.jpg)
+
+*The board running on a T-Display-S3 in a standard case. Photographed before the
+shared header row was added, so the on-screen layout differs slightly from the
+renders above.*
 
 ## What it does
 
@@ -36,8 +49,8 @@ running on a T-Display-S3 in a standard case.*
   Countdown feed. With a stop configured the board cycles trains for 30s, then
   buses for 15s, and back — route number, destination, and a "Due" / "N min"
   countdown that ticks between polls
-- Top three departures shown large: time + destination, with status
-  (delay/cancellation) and platform when relevant; long names scroll
+- Top three departures: time + destination, with status (delay/cancellation)
+  and platform when relevant; long names scroll
 - Big NTP clock in a dot-matrix font, with automatic BST
 - Exponential back-off on API failure, stale data kept on screen with a
   "No signal" indicator, and a connectivity-warning screen after 3 failures
@@ -52,11 +65,21 @@ no editing files, no compiling:
    **[installer README](installer/README.md)** has the hardware buying links and a
    step-by-step raildata.org.uk walkthrough for the key.
 2. Plug the board into USB and run **`Esp32DeparturesInstaller.exe`**.
-3. Answer the prompts (WiFi, API key, station, filters, …). Done — the board
-   reboots showing departures.
+3. Answer the prompts (WiFi, API key, station, filters, and — if you want it —
+   a London bus stop). Done — the board reboots showing departures.
 
-Settings are stored **on the device**, so to change them later just run the
-installer again and pick **Configure only** (no re-flash). Full details:
+Settings are stored **on the device**, so run the installer again any time. If a
+configured board is detected it offers three choices:
+
+| | What it does |
+|---|---|
+| **[C] Change settings** | Keeps the firmware, walks the prompts |
+| **[U] Update firmware only** | Asks nothing — new firmware, every setting kept |
+| **[F] Update firmware AND change settings** | Both |
+
+Every prompt is pre-filled from what the board is already using, and the WiFi
+password and API key accept a blank answer meaning *keep the existing one*, so
+neither ever has to be retyped. Full details:
 **[installer/README.md](installer/README.md)**.
 
 ## Build from source (developers only)
@@ -74,10 +97,15 @@ the board is provisioned at runtime (by the installer, or the serial protocol in
    pio device monitor      # serial logs (115200)
    ```
 3. Provision the freshly-flashed board with the installer, or by sending the
-   serial protocol directly (`PING` / `CFG key=value` / `COMMIT`).
+   serial protocol directly (`PING` / `CFG key=value` / `COMMIT`). `GET` reports
+   the current config (secrets never echoed — the WiFi password only as
+   `passlen`) and `SCAN` lists the networks the board's own radio can see, which
+   is usually the fastest way to diagnose a board that will not connect.
 
-Compile-time tunables live in `include/app_config.h` (layout, back-off, time
-window, `HIDE_ONTIME_STATUS`, `RAW_JSON_DEBUG`). After a firmware change, refresh
+Compile-time tunables live in `include/app_config.h`: layout, back-off, time
+window, `HIDE_ONTIME_STATUS`, `RAW_JSON_DEBUG`, and the bus settings
+(`TRAIN_SCREEN_SECONDS`, `BUS_SCREEN_SECONDS`, `BUS_REFRESH_SECONDS`,
+`MAX_BUS_ARRIVALS`, `RAW_BUS_DEBUG`). After a firmware change, refresh
 the installer's bundled binary: copy `.pio/build/lilygo-t-display-s3/firmware.bin`
 into `installer/firmware/` and run `installer/build_exe.py`.
 
@@ -99,7 +127,7 @@ into `installer/firmware/` and run `installer/build_exe.py`.
 ## Project layout
 
 ```
-firmware/esp32-tdisplay-s3/
+ESP32Departures/
 ├── platformio.ini            PlatformIO env, board, libs
 ├── REQUIREMENTS.md           canonical requirements + attribution
 ├── include/
@@ -113,7 +141,7 @@ firmware/esp32-tdisplay-s3/
 │   ├── rail_api.cpp          National Rail LDBWS REST/JSON client
 │   ├── bus_api.cpp           TfL live bus arrivals (Countdown/URA) client
 │   └── display.cpp           LovyanGFX panel config + rendering
-├── docs/                     board mockups + font-conversion script
+├── docs/                     mockup renderer + font-conversion script
 └── installer/                self-contained Windows installer (.exe)
 ```
 
