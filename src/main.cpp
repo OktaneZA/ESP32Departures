@@ -8,8 +8,8 @@
 //   * Shared state guarded by a mutex (render never fetches, fetch never draws).
 //   * Exponential back-off; stale data kept with a "No signal" overlay; a
 //     connectivity-warning screen after repeated failures; screen-blank hours.
-//   * Optional second screen: live London bus arrivals from TfL's open Countdown
-//     feed. When a bus stop is configured the board cycles train -> bus -> train.
+//   * Either service is optional: the board can show trains, London buses, or
+//     both. With both it cycles train -> bus -> train; with one it stays put.
 //   * Until provisioned, shows an "Awaiting setup" screen and listens on serial.
 
 #include <Arduino.h>
@@ -178,7 +178,7 @@ static void fetchTask(void*) {
     for (;;) {
         if (WiFi.status() != WL_CONNECTED) connectWiFi();
 
-        if ((int32_t)(millis() - nextTrain) >= 0) {
+        if (cfg::get().train_enabled() && (int32_t)(millis() - nextTrain) >= 0) {
             nextTrain = millis() + fetchTrainsOnce();
         }
         if (cfg::get().bus_enabled() && (int32_t)(millis() - nextBus) >= 0) {
@@ -241,11 +241,14 @@ void setup() {
 // ---------------------------------------------------------------------------
 // Screen rotation
 //
-// With no bus stop configured the board is exactly what it always was: trains,
-// permanently. Once a stop is configured *and* TfL has answered for it at least
-// once, the board alternates train (30s) -> bus (15s) -> train (30s) -> ...
-// A stop code TfL rejects never earns a slot, so a typo costs the user nothing
-// more than the trains they already had.
+// The user picks trains, buses, or both. With both, the board alternates
+// train (30s) -> bus (15s) -> train (30s) -> ...; with one service it simply
+// stays on that screen.
+//
+// The bus screen also has to *earn* its slot by TfL having answered for the
+// stop at least once, so a stop code TfL rejects costs a train-and-bus user
+// nothing more than the trains they already had. On a bus-only board there is
+// no train screen to fall back to, so it shows a loading splash instead.
 // ---------------------------------------------------------------------------
 enum class Screen { Train, Bus };
 
@@ -298,26 +301,40 @@ void loop() {
     static bool timerStarted = false;
     if (!timerStarted) { screenSince = millis(); timerStarted = true; }
 
-    bool showBus = cfg::get().bus_enabled() && busReady;
-    if (!showBus) {
-        if (screen != Screen::Train) { screen = Screen::Train; ui::resetScroll(); }
-        screenSince = millis();   // hold the clock at zero while there is no bus screen
-    } else {
+    const Config& c = cfg::get();
+    bool showTrain = c.train_enabled();
+    bool showBus = c.bus_enabled() && busReady;
+
+    if (showTrain && showBus) {
         uint32_t dwell = (screen == Screen::Bus ? BUS_SCREEN_SECONDS : TRAIN_SCREEN_SECONDS) * 1000UL;
         if (millis() - screenSince >= dwell) {
             screen = (screen == Screen::Train) ? Screen::Bus : Screen::Train;
             screenSince = millis();
             ui::resetScroll();    // long names restart rather than resume mid-scroll
         }
+    } else {
+        // Only one screen to show (or none yet) — park on it and hold the timer
+        // at zero so the first cycle is a full dwell once the other appears.
+        Screen only = showBus ? Screen::Bus : Screen::Train;
+        if (screen != only) { screen = only; ui::resetScroll(); }
+        screenSince = millis();
     }
 
     if (screen == Screen::Bus) {
-        ui::renderBusBoard(bus, busStop, cfg::get().bus_line,
-                           millis() - busFetchedMs, busErr);
+        ui::renderBusBoard(bus, busStop, c.bus_line, millis() - busFetchedMs, busErr);
+    } else if (!showTrain) {
+        // Bus-only board with no arrivals yet: there is no train screen to fall
+        // back to, so say what it is waiting for rather than showing an empty
+        // departure board for a station that was never configured.
+        if (busErr >= 3) {
+            ui::renderConnectivityWarning(busStop.length() ? busStop : c.bus_stop, busErr);
+        } else {
+            ui::showStartup("Esp32Departures", "Loading bus arrivals...");
+        }
     } else if (badStation) {
-        ui::renderError("Unknown station", cfg::get().dep_crs);
+        ui::renderError("Unknown station", c.dep_crs);
     } else {
-        String label = station.length() ? station : cfg::get().dep_crs;
+        String label = station.length() ? station : c.dep_crs;
         if (err >= 3) {
             ui::renderConnectivityWarning(label, err);
         } else {

@@ -85,6 +85,9 @@ def validate_station(key, crs):
 def verify_config(cfg):
     """Re-prompt until the station (and key) are accepted online, or the check
     can't run (offline). Only warns in the offline case."""
+    if cfg.get("mode") == "bus":
+        print("  (buses only - no station or API key to check)")
+        return
     if cfg["key"] is None:
         # Keeping the board's existing key, which it never hands back, so there
         # is nothing to check with. The board itself will show "Unknown station".
@@ -289,14 +292,19 @@ def find_stops(search):
     return stops_near_any(origins, 250), label
 
 
-def choose_bus_stop(current=""):
+def choose_bus_stop(current="", required=False):
     """Interactive stop finder. Returns the chosen 5-digit stop code, or ''."""
     while True:
         print("\n  Where is your stop? Enter a postcode (e.g. 'KT3 6PF'), a place")
         print("  name (e.g. 'Green Park Station'), or the 5-digit code on the stop.")
         # Blank keeps the stop already configured rather than silently dropping
         # it - only a board with no stop yet treats blank as "skip".
-        blank = f"blank = keep {current}" if current else "blank to skip"
+        if current:
+            blank = f"blank = keep {current}"
+        elif required:
+            blank = "required"
+        else:
+            blank = "blank to skip"
         search = input(f"  Postcode / place / code ({blank}): ").strip()
         if not search:
             return current
@@ -333,23 +341,36 @@ def choose_bus_stop(current=""):
         return shown[int(sel)]["code"]
 
 
-def bus_wizard(defaults):
-    """Optional London bus section of the wizard. Returns (stop_code, line_filter)."""
-    print("\nLondon buses (optional)")
-    print("  The board can cycle to a live bus arrivals screen: trains for 30s,")
-    print("  then your bus stop for 15s, over and over. Uses TfL's open data -")
-    print("  no extra key needed. London only.")
+def bus_wizard(defaults, required=False):
+    """London bus section of the wizard. Returns (stop_code, line_filter).
 
+    `required` is set for a buses-only board, where declining would leave the
+    board with nothing at all to show, so a stop is asked for until given."""
     current = defaults.get("bus", "")
-    default_yes = bool(current)
-    prompt = "  Add a London bus stop? [Y/n]: " if default_yes else "  Add a London bus stop? [y/N]: "
-    answer = input(prompt).strip().lower()
-    if not answer:
-        answer = "y" if default_yes else "n"
-    if not answer.startswith("y"):
-        return "", ""
 
-    code = choose_bus_stop(current)
+    if required:
+        print("\nYour bus stop")
+        print("  The board will show live arrivals for one London stop.")
+    else:
+        print("\nLondon buses (optional)")
+        print("  The board can cycle to a live bus arrivals screen: trains for 30s,")
+        print("  then your bus stop for 15s, over and over. Uses TfL's open data -")
+        print("  no extra key needed. London only.")
+        default_yes = bool(current)
+        prompt = ("  Add a London bus stop? [Y/n]: " if default_yes
+                  else "  Add a London bus stop? [y/N]: ")
+        answer = input(prompt).strip().lower()
+        if not answer:
+            answer = "y" if default_yes else "n"
+        if not answer.startswith("y"):
+            return "", ""
+
+    while True:
+        code = choose_bus_stop(current, required)
+        if code or not required:
+            break
+        print("  ! A buses-only board needs a stop. Enter one, or re-run and"
+              " choose a mode that includes trains.")
     if not code:
         return "", ""
 
@@ -472,7 +493,7 @@ def provision(port, cfg, wait_boot=20.0):
             return False
 
         for key in ("ssid", "pass", "key", "dep", "dest", "plat", "tz",
-                    "bus", "busline", "bstart", "bend", "bright", "refr"):
+                    "bus", "busline", "mode", "bstart", "bend", "bright", "refr"):
             # None means "leave whatever the board already has". The firmware
             # stages a COMMIT on top of its current config, so simply not
             # sending a key preserves it.
@@ -529,6 +550,27 @@ def ask(prompt, default="", required=False, cast=str, lo=None, hi=None):
         return val
 
 
+def ask_mode(current="both"):
+    """Which services the board should show. Returns "both" | "train" | "bus"."""
+    labels = {"both": "Trains and buses", "train": "Trains only", "bus": "Buses only"}
+    order = ["both", "train", "bus"]
+    default = current if current in order else "both"
+    print("\nWhat should the board show?")
+    for i, m in enumerate(order, 1):
+        mark = "  (current)" if m == default else ""
+        print(f"  [{i}] {labels[m]}{mark}")
+    print("      Trains are UK-wide (National Rail); buses are London-only (TfL).")
+    while True:
+        raw = input(f"Choose [{order.index(default) + 1}]: ").strip()
+        if not raw:
+            return default
+        if raw.isdigit() and 1 <= int(raw) <= len(order):
+            return order[int(raw) - 1]
+        if raw.lower() in order:
+            return raw.lower()
+        print("  ! choose 1, 2 or 3")
+
+
 def wizard(defaults=None, on_board=False):
     """Ask for every setting. `defaults` pre-fills from the board's current
     config; `on_board` means the board is already configured, so the two secrets
@@ -547,12 +589,24 @@ def wizard(defaults=None, on_board=False):
         pw = ask(f"WiFi password{keep}", "")
     cfg["pass"] = pw if pw else (None if on_board else "")
 
-    api = ask(f"LDBWS API key (raildata.org.uk){keep}", "", required=not on_board)
-    cfg["key"] = api if api else (None if on_board else "")
-    cfg["dep"] = ask("Departure station CRS", d.get("dep", ""), required=True).upper()
-    cfg["dest"] = ask("Destination CRS filter (optional)", d.get("dest", "")).upper()
-    cfg["plat"] = ask("Platform filter (optional)", d.get("plat", ""))
-    cfg["bus"], cfg["busline"] = bus_wizard(d)
+    cfg["mode"] = ask_mode(d.get("mode", "both"))
+
+    # Train settings are only asked for when trains are actually wanted. A
+    # bus-only board needs no API key and no station at all.
+    if cfg["mode"] == "bus":
+        cfg["key"] = cfg["dep"] = cfg["dest"] = cfg["plat"] = None
+    else:
+        api = ask(f"LDBWS API key (raildata.org.uk){keep}", "", required=not on_board)
+        cfg["key"] = api if api else (None if on_board else "")
+        cfg["dep"] = ask("Departure station CRS", d.get("dep", ""), required=True).upper()
+        cfg["dest"] = ask("Destination CRS filter (optional)", d.get("dest", "")).upper()
+        cfg["plat"] = ask("Platform filter (optional)", d.get("plat", ""))
+
+    if cfg["mode"] == "train":
+        # Leave the stored stop alone so switching buses back on keeps it.
+        cfg["bus"] = cfg["busline"] = None
+    else:
+        cfg["bus"], cfg["busline"] = bus_wizard(d, required=(cfg["mode"] == "bus"))
     print("\nScreen blank hours turn the display OFF between two times (e.g. START 23,")
     print("END 7 blanks it overnight). Enter -1 for both to leave it on all the time.")
     while True:
@@ -587,13 +641,17 @@ def summary(cfg):
     else:
         masked_key = "(set)"
     pw = "(password unchanged)" if cfg["pass"] is None else "(password set)"
+    mode = cfg.get("mode") or "both"
+    shows = {"both": "Trains and buses", "train": "Trains only", "bus": "Buses only"}
     print("\n  Summary")
+    print(f"    Shows       {shows.get(mode, mode)}")
     print(f"    WiFi        {cfg['ssid']}  {pw}")
-    print(f"    API key     {masked_key}")
-    print(f"    Station     {cfg['dep']}" + (f" -> {cfg['dest']}" if cfg["dest"] else ""))
-    if cfg["plat"]:
-        print(f"    Platform    {cfg['plat']}")
-    if cfg.get("bus"):
+    if mode != "bus":
+        print(f"    API key     {masked_key}")
+        print(f"    Station     {cfg['dep']}" + (f" -> {cfg['dest']}" if cfg["dest"] else ""))
+        if cfg["plat"]:
+            print(f"    Platform    {cfg['plat']}")
+    if mode != "train" and cfg.get("bus"):
         route = f" (route {cfg['busline']} only)" if cfg.get("busline") else ""
         print(f"    Bus stop    {cfg['bus']}{route}")
     if cfg["bstart"] != -1 or cfg["bend"] != -1:
@@ -639,9 +697,14 @@ def run_interactive():
     current = {}
     if has_fw:
         current = read_config(port)
-        if current.get("dep"):
-            bus = f", bus {current['bus']}" if current.get("bus") else ""
-            print(f"\nBoard is set up for station {current['dep']}{bus} "
+        if current.get("prov") == "1":
+            mode = current.get("mode") or "both"
+            shows = []
+            if mode != "bus" and current.get("dep"):
+                shows.append(f"station {current['dep']}")
+            if mode != "train" and current.get("bus"):
+                shows.append(f"bus stop {current['bus']}")
+            print(f"\nBoard is showing {' and '.join(shows) or 'nothing yet'} "
                   f"on WiFi '{current.get('ssid', '?')}'.")
         choice = input("\nBoard already has Esp32Departures firmware.\n"
                        "  [C] Change settings (keeps the firmware)\n"
@@ -706,7 +769,7 @@ def run_auto(path):
     # matching the interactive wizard. Pass an explicit "" to clear a setting.
     cfg = {k: d.get(k) for k in
            ("ssid", "pass", "key", "dep", "dest", "plat", "tz",
-            "bus", "busline", "bstart", "bend", "bright", "refr")}
+            "bus", "busline", "mode", "bstart", "bend", "bright", "refr")}
     if cfg["tz"] == "":
         cfg["tz"] = detect_tz()
     port = d.get("port") or pick_port()

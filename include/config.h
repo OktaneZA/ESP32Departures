@@ -14,18 +14,31 @@ struct Config {
     String tz;           // POSIX TZ string ("" = firmware default, UK)
     String bus_stop;     // optional TfL bus stop SMS code ("" = bus screen off)
     String bus_line;     // optional bus route filter, e.g. "38" ("" = all routes)
+    String mode;         // "both" | "train" | "bus" ("" = both, pre-mode configs)
     int    blank_start = -1;   // screen-blank start hour (-1 = off)
     int    blank_end   = -1;   // screen-blank end hour (-1 = off)
     int    brightness  = 180;  // 0-255
     int    refresh     = 60;   // poll interval, seconds
 
-    bool provisioned() const {
-        return wifi_ssid.length() && api_key.length() && dep_crs.length();
+    // Which services the user asked for. `mode` only expresses intent; a service
+    // is actually live when its settings are present too, so switching trains
+    // off keeps the API key and station stored for switching back.
+    bool wants_train() const { return mode != "bus"; }
+    bool wants_bus() const { return mode != "train"; }
+
+    bool train_enabled() const {
+        return wants_train() && api_key.length() && dep_crs.length();
     }
 
-    // True when the user asked for the London bus screen. The TfL feed needs no
-    // key of its own, so a stop code is the only thing that enables it.
-    bool bus_enabled() const { return bus_stop.length() > 0; }
+    // The TfL feed needs no key of its own, so a stop code is the only setting
+    // the bus screen requires.
+    bool bus_enabled() const { return wants_bus() && bus_stop.length(); }
+
+    // Usable once there is WiFi and at least one service to show. A bus-only
+    // board is fully provisioned with no API key and no station at all.
+    bool provisioned() const {
+        return wifi_ssid.length() && (train_enabled() || bus_enabled());
+    }
 };
 
 namespace cfg {

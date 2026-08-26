@@ -8,8 +8,9 @@ directly from the National Rail Live Departure Board (LDBWS) JSON API and render
 them on the board's built-in 170×320 colour LCD — no host computer, server, or
 cloud service.
 
-Optionally it also shows **live London bus arrivals** for one bus stop, taken
-from TfL's open Countdown feed, cycling between the two boards.
+It can also show **live London bus arrivals** for one bus stop, taken from TfL's
+open Countdown feed. Either service is optional: the board can be set to show
+trains, buses, or both, cycling between the two boards when both are on.
 
 This document is a **retrospective** specification: it records the requirements
 the delivered firmware and installer actually satisfy.
@@ -252,6 +253,7 @@ generic and shareable.
 | `dest` | No | — | Destination filter CRS (empty = all) |
 | `plat` | No | — | Platform filter (empty = all) |
 | `tz` | No | UK | POSIX timezone string; the installer sets it from the PC's locale |
+| `mode` | No | `both` | Which services to show: `both`, `train`, or `bus` |
 | `bus` | No | - | TfL bus stop SMS code (empty = no bus screen at all) |
 | `busline` | No | - | Bus route filter, e.g. `38` (empty = every route at the stop) |
 | `bstart` | No | `-1` | Screen-blank start hour (−1 = off) |
@@ -266,6 +268,9 @@ generic and shareable.
 | CFG-03 | Until provisioned, an "Awaiting setup" screen is shown and normal operation is suspended |
 | CFG-04 | Reconfiguration is possible at any time over serial without re-flashing |
 | CFG-05 | The bus screen is opt-in: with `bus` empty the firmware never contacts TfL and behaves exactly as the train-only board |
+| CFG-06 | `mode` selects trains, buses, or both. It expresses **intent only** — a service is live when its mode allows it *and* its settings are present, so switching trains off keeps the API key and station stored for switching back |
+| CFG-07 | A board is provisioned once it has WiFi and **at least one** live service. A buses-only board needs no API key and no station at all |
+| CFG-08 | `mode` absent (a config written before it existed) means `both`, so existing boards are unaffected |
 
 ---
 
@@ -284,7 +289,7 @@ generic and shareable.
 | DISP-09 | Flicker-free rendering via a full-frame PSRAM sprite back-buffer at ~30 fps |
 | DISP-10 | Clock time from NTP; timezone from the provisioned POSIX `tz` (set from the user's PC locale), falling back to UK. Set via `configTzTime` so DST applies |
 | DISP-11 | An invalid departure CRS (API returns HTTP 400) shows a dedicated red "Unknown station" screen, not a generic connectivity error |
-| DISP-12 | With a bus stop configured, the board cycles **trains for 30 s, then buses for 15 s**, repeating (`TRAIN_SCREEN_SECONDS` / `BUS_SCREEN_SECONDS`) |
+| DISP-12 | With both services live, the board cycles **trains for 30 s, then buses for 15 s**, repeating (`TRAIN_SCREEN_SECONDS` / `BUS_SCREEN_SECONDS`); with one service it stays on that screen |
 | DISP-13 | The bus screen shows up to 3 arrivals laid out like a train row: expected time, route number, destination, and a right-aligned countdown ("Due" under a minute, otherwise "N min") |
 | DISP-14 | Bus countdowns tick down live between polls rather than freezing for the 30 s poll interval |
 | DISP-15 | The bus screen is only entered once TfL has answered successfully for the stop at least once; an unconfigured or rejected stop leaves the train board permanently on screen |
@@ -292,6 +297,7 @@ generic and shareable.
 | DISP-17 | The header shows the station/stop name in the large font, with a small dim "TRAIN" / "BUS" (or "BUS <route>") tag beside it |
 | DISP-18 | Both boards share one layout: a header row (mode tag + station/stop name), three identical rows, then the clock |
 | DISP-19 | All three rows use the same font; times and statuses use the smaller font, vertically centred, so the destination column gets the width |
+| DISP-20 | A buses-only board with no arrivals yet shows a "Loading bus arrivals..." splash, not an empty departure board for a station that was never configured |
 
 ---
 
@@ -304,7 +310,7 @@ Newline-terminated line protocol on the USB CDC serial port (`src/config.cpp`).
 | PROV-01 | `PING` → `PONG Esp32Departures` (discovery/handshake) |
 | PROV-02 | `CFG <key>=<value>` → `ACK <key>` (stages a value) |
 | PROV-03 | `COMMIT` → `SAVED`, then the device saves to NVS and reboots |
-| PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
+| PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `mode`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
 | PROV-05 | Protocol available whether provisioned or not, so reconfiguration always works |
 | PROV-06 | Host opens serial with `dtr=True, rts=False` to avoid resetting the ESP32-S3 |
 | PROV-07 | `GET` never returns a secret: the API key is not reported at all and the WiFi password only as `passlen` (its length), which distinguishes an empty or truncated password from a wrong one |
@@ -338,6 +344,8 @@ PyInstaller) that flashes the firmware and provisions the board.
 | INST-16 | The chosen stop is verified against the live feed and the next few arrivals printed, so a wrong stop is caught before anything is written to the board |
 | INST-17 | A blank answer at the stop search **keeps** an already-configured stop; only a board with no stop treats blank as "skip" |
 | INST-18 | Screen-blank hours are echoed back as an off-window with its duration, and an off-window longer than half a day must be confirmed — entering START/END the wrong way round blanks the board for most of the day and reads as broken hardware |
+| INST-19 | The wizard asks which services to show before anything else, then prompts only for what that mode needs — a buses-only board is never asked for an API key or station |
+| INST-20 | A buses-only board must have a stop: the search repeats until one is given, since declining would leave nothing to display |
 
 ---
 
@@ -359,6 +367,7 @@ PyInstaller) that flashes the firmware and provisions the board.
 | ARCH-12 | Both feeds are polled from the **one** fetch task on independent deadlines — a second task would need its own 16 KB TLS stack for no benefit |
 | ARCH-13 | The scheduler compares deadlines as signed differences, so it survives `millis()` wrapping |
 | ARCH-14 | The bus feed has its own error counter and back-off, independent of the rail feed |
+| ARCH-15 | A feed the user has switched off is never polled at all |
 
 ---
 

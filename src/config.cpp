@@ -10,7 +10,7 @@
 //   GET                  -> key=value lines (secrets masked), then END
 //   SCAN                 -> WiFi networks the board can actually see, then END
 //
-// Keys: ssid pass key dep dest plat tz bus busline bstart bend bright refr
+// Keys: ssid pass key dep dest plat tz bus busline mode bstart bend bright refr
 
 #include "config.h"
 #include "app_config.h"   // compile-time defaults
@@ -38,6 +38,7 @@ void load_from_nvs(Config& c) {
     c.tz          = prefs.getString("tz",   "");
     c.bus_stop    = prefs.getString("bus",  "");
     c.bus_line    = prefs.getString("busln", "");
+    c.mode        = prefs.getString("mode", "");   // "" = both (pre-mode configs)
     c.blank_start = prefs.getInt("bstart", -1);
     c.blank_end   = prefs.getInt("bend",   -1);
     c.brightness  = prefs.getInt("bright", BRIGHTNESS);
@@ -61,6 +62,7 @@ void stage_kv(const String& kv) {
     else if (k == "tz")     g_stage.tz         = v;
     else if (k == "bus")    g_stage.bus_stop   = v;
     else if (k == "busline") g_stage.bus_line  = v;
+    else if (k == "mode")   g_stage.mode       = v;
     else if (k == "bstart") g_stage.blank_start = v.toInt();
     else if (k == "bend")   g_stage.blank_end   = v.toInt();
     else if (k == "bright") g_stage.brightness  = v.toInt();
@@ -82,6 +84,7 @@ void commit_and_reboot() {
     prefs.putString("tz",   g_stage.tz);
     prefs.putString("bus",  g_stage.bus_stop);
     prefs.putString("busln", g_stage.bus_line);
+    prefs.putString("mode", g_stage.mode);
     prefs.putInt("bstart", g_stage.blank_start);
     prefs.putInt("bend",   g_stage.blank_end);
     prefs.putInt("bright", g_stage.brightness);
@@ -147,6 +150,7 @@ void handle_line(String line) {
         Serial.print("plat=");   Serial.println(g_cfg.platform);
         Serial.print("bus=");    Serial.println(g_cfg.bus_stop);
         Serial.print("busline="); Serial.println(g_cfg.bus_line);
+        Serial.print("mode=");   Serial.println(g_cfg.mode.length() ? g_cfg.mode : String("both"));
         Serial.print("ssid=");   Serial.println(g_cfg.wifi_ssid);
         // Length only, never the password itself - enough to tell an empty or
         // truncated password from a wrong one without leaking it.

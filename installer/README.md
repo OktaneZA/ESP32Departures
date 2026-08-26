@@ -41,7 +41,10 @@ compatible with this firmware.
 
 ## Get your National Rail API key
 
-The board needs a free API key for live departure data:
+The board needs a free API key for live **train** departure data. Skip this
+section entirely if you are setting up a **buses-only** board — TfL's bus feed
+needs no key.
+
 
 1. **Create an account** at **[raildata.org.uk](https://raildata.org.uk/)** — register
    a **personal account** and verify your email.
@@ -79,9 +82,11 @@ so pressing Enter through the whole wizard changes nothing.
 
 ### What you'll be asked
 - WiFi network + password (2.4 GHz only — the ESP32-S3 has no 5 GHz radio)
-- LDBWS API key (your consumer key from [raildata.org.uk](https://raildata.org.uk))
-- Departure station CRS (e.g. `MOT`), optional destination + platform filters
-- **Whether to add a London bus stop** (see below) — answer `n` if you don't want one
+- **What the board should show** — trains and buses, trains only, or buses only.
+  You are then asked only for what that mode needs
+- *(trains)* LDBWS API key (your consumer key from [raildata.org.uk](https://raildata.org.uk))
+- *(trains)* Departure station CRS (e.g. `MOT`), optional destination + platform filters
+- *(buses)* Your London bus stop (see below)
 - Screen-blank hours (the display turns off between them — e.g. 23 to 7 for
   overnight; enter `-1` for both to keep it on all the time), brightness,
   refresh interval
@@ -100,10 +105,14 @@ rather than a blank error.)
 
 ## Adding a London bus stop (optional)
 
-The board can cycle to a second screen showing live bus arrivals: **trains for
-30 seconds, then your bus stop for 15 seconds**, over and over. It uses TfL's
-open Countdown data, so there is **no extra API key to get** — but it only
-covers **London** buses (and TfL river bus piers).
+Buses can be shown on their own, or alongside the trains. With both, the board
+cycles **trains for 30 seconds, then your bus stop for 15 seconds**, over and
+over. It uses TfL's open Countdown data, so there is **no extra API key to
+get** — but it only covers **London** buses (and TfL river bus piers).
+
+A **buses-only** board needs no API key and no station, so the wizard skips
+those prompts entirely — but it does require a stop, since otherwise there
+would be nothing to display.
 
 The installer asks *"Add a London bus stop?"* and, if you say yes, one prompt
 finds the stop for you — you don't need to know any codes. Type whichever you
@@ -244,7 +253,8 @@ python installer.py --auto cfg.json
 ```
 
 where `cfg.json` has `port`, `flash`, and any of the settings keys
-(`ssid pass key dep dest plat tz bus busline bstart bend bright refr`).
+(`ssid pass key dep dest plat tz bus busline mode bstart bend bright refr`).
+`mode` is `both`, `train`, or `bus`.
 
 A key you **leave out** keeps whatever the board already has; pass an explicit
 `""` to clear one. So a partial update is just:

@@ -3,8 +3,8 @@
 A C++/JSON rewrite of the [Raspberry Pi departure board](https://github.com/OktaneZA/PiDepartures) for the
 **LilyGo T-Display-S3** (ESP32-S3, 1.9″ 170×320 ST7789 LCD). No Pi, no Docker, no
 server — the ESP32 fetches live UK train departures over WiFi and drives the
-built-in colour LCD directly. Optionally it also shows **live London bus
-arrivals** for one stop, cycling between the two boards.
+built-in colour LCD directly. It can also show **live London bus arrivals** for
+one stop. Either service is optional — show trains, buses, or both.
 
 > **Credits.** Derived from Chris Crocker-White's
 > [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display)
@@ -45,10 +45,11 @@ renders above.*
 ## What it does
 
 - Live departures for a station (optionally filtered to a destination or platform)
-- **Optional London bus screen:** live arrivals for one bus stop from TfL's open
-  Countdown feed. With a stop configured the board cycles trains for 30s, then
-  buses for 15s, and back — route number, destination, and a "Due" / "N min"
-  countdown that ticks between polls
+- **Trains, buses, or both** — you choose at setup. With both, the board cycles
+  trains for 30s then buses for 15s; with one, it stays on that screen
+- **London bus arrivals** for one stop from TfL's open Countdown feed — expected
+  time, route number, destination, and a "Due" / "N min" countdown that ticks
+  between polls
 - Top three departures: time + destination, with status (delay/cancellation)
   and platform when relevant; long names scroll
 - Big NTP clock in a dot-matrix font, with automatic BST
@@ -65,8 +66,9 @@ no editing files, no compiling:
    **[installer README](installer/README.md)** has the hardware buying links and a
    step-by-step raildata.org.uk walkthrough for the key.
 2. Plug the board into USB and run **`Esp32DeparturesInstaller.exe`**.
-3. Answer the prompts (WiFi, API key, station, filters, and — if you want it —
-   a London bus stop). Done — the board reboots showing departures.
+3. Answer the prompts. It asks first whether you want **trains, buses, or both**,
+   then only what that needs — a buses-only board is never asked for an API key
+   or a station. Done — the board reboots showing live times.
 
 Settings are stored **on the device**, so run the installer again any time. If a
 configured board is detected it offers three choices:
