@@ -112,26 +112,100 @@ Incompatible look-alikes (different display/driver): T-Display-S3 **AMOLED**
 
 Used only when the user configures a bus stop. Sourced from TfL's Countdown
 system via the "URA" instant interface, documented in
-[TfL's Live Bus & River Bus Arrivals API interface spec](https://content.tfl.gov.uk/tfl-live-bus-river-bus-arrivals-api-documentation.pdf).
+[TfL's Live Bus & River Bus Arrivals API interface spec](https://content.tfl.gov.uk/tfl-live-bus-river-bus-arrivals-api-documentation.pdf)
+(v2.1, 05/08/2016).
 
 | Item | Detail |
 |---|---|
-| **API** | TfL Live Bus & River Bus Arrivals (Countdown / URA) |
+| **API** | TfL Live Bus & River Bus Arrivals (Countdown / URA), instant interface |
 | **Endpoint** | `https://countdown.api.tfl.gov.uk/interfaces/ura/instant_V1` |
-| **Protocol** | HTTPS; one JSON array per line (deliberately *not* a JSON document) |
-| **Authentication** | **None** — the feed is open, no key or registration |
-| **Query params** | `StopCode1` (5-digit SMS stop code), optional `LineName`, `ReturnList`, `Circle` (stop search) |
-| **Data returned** | Route, destination, absolute arrival time (Unix epoch ms, UTC) |
+| **Protocol** | HTTPS. The body is **JSON-like but not a JSON document**: one JSON array per line, newline-separated |
+| **Authentication** | **None** — the instant feed is open, no key or registration. (The *streaming* interface needs Digest auth and is not used) |
+| **Data returned** | Route, destination, absolute arrival time (Unix epoch **milliseconds**, UTC) |
 | **Coverage** | London buses and TfL river bus piers only |
-| **Polling interval** | 30 s (the feed is cached at source for 30 s; polling faster returns identical data) |
-| **Attribution** | "Data provided by Transport for London" — and applications must not imply they are official TfL apps |
+| **Freshness** | Refreshed at source every 30 s and cached 30 s; the spec states there is no benefit to polling faster |
+| **Prediction horizon** | The next 30 minutes |
+| **Attribution** | "Data provided by Transport for London". Applications must not carry TfL branding or imply they are official TfL apps |
+
+### 3a.1 Requests used
+
+**Arrivals (firmware, `src/bus_api.cpp`):**
+
+```
+GET /interfaces/ura/instant_V1
+    ?StopCode1={5-digit SMS stop code}
+    &StopAlso=True
+    [&LineName={route}]
+    &ReturnList=StopPointName,LineName,DestinationText,EstimatedTime,ExpireTime
+```
+
+**Stop search (installer, `installer/installer.py`):**
+
+```
+GET /interfaces/ura/instant_V1
+    ?Circle={lat},{lon},{radius_m}
+    &StopPointState=0
+    &StopAlso=True
+    &ReturnList=StopCode1,StopPointName,StopPointIndicator,Towards,Latitude,Longitude
+```
+
+### 3a.2 Response format
+
+The first element of every line is the array type:
+
+| Type | Array | Used for |
+|---|---|---|
+| 0 | Stop | The stop's own record (name); returned for a stop with no predictions when `StopAlso=True` |
+| 1 | Prediction | One expected arrival |
+| 2 | Flexible Message | Service disruption text — not requested |
+| 3 | Baseversion | Reference-data version — not requested |
+| 4 | URA Version | Always the **first** line; carries the server timestamp |
+
+**Fields are returned in the spec's own sequence order, not the order given in
+`ReturnList`.** With the requests above the lines are therefore:
+
+| Line | Shape |
+|---|---|
+| URA version | `[4, "1.0", serverTimeMs]` |
+| Prediction (firmware) | `[1, StopPointName, LineName, DestinationText, EstimatedTime, ExpireTime]` |
+| Stop (firmware, `StopAlso`) | `[0, StopPointName]` — only two elements |
+| Stop (installer search) | `[0, StopPointName, StopCode1, Towards, StopPointIndicator, Latitude, Longitude]` |
+
+For reference, the full documented sequences are — Prediction: `ResponseType,
+StopPointName, StopID, StopCode1, StopCode2, StopPointType, Towards, Bearing,
+StopPointIndicator, StopPointState, Latitude, Longitude, VisitNumber, LineID,
+LineName, DirectionID, DestinationText, DestinationName, VehicleID, TripID,
+RegistrationNumber, EstimatedTime, ExpireTime`; Stop: the same list up to
+`Longitude`.
+
+### 3a.3 Status codes
+
+| Code | Meaning | Handling |
+|---|---|---|
+| 200 | OK | Parse |
+| 400 | Malformed request (e.g. an unknown `ReturnList` field) | Transient failure + back-off |
+| 416 | **Stop code unknown** (`Stop code unknown: SMS:nnnnn`) | Configuration error — see BUS-09 |
+| 401 / 500 / 502 | Auth (streaming only) / server / upstream error | Transient failure + back-off |
+
+### 3a.4 Supporting services (installer only)
+
+Finding a stop from a place needs a coordinate, which the URA feed does not
+provide. Both of these run **on the user's PC during setup only** — the board
+itself never calls them:
+
+| Service | Use | Auth |
+|---|---|---|
+| `https://api.tfl.gov.uk/StopPoint/Search` | Place / stop name — coordinates | None |
+| `https://api.postcodes.io/postcodes/{postcode}` | UK postcode — coordinates | None |
+
+### 3a.5 Requirements
 
 | ID | Requirement |
 |---|---|
 | BUS-01 | HTTPS enforced for the TfL endpoint; no HTTP fallback |
-| BUS-02 | Response parsed **line by line**, each line a JSON array whose first element is the array type (4 = URA version, 1 = prediction) |
+| BUS-02 | Response parsed **line by line**, each line a JSON array whose first element is the array type |
 | BUS-03 | Fields are read by the **documented sequence order**, not the `ReturnList` order — the feed reorders them |
-| BUS-04 | Arrival countdowns computed against the feed's own timestamp (first line), so they stay correct even if the board's clock is wrong |
+| BUS-04 | Arrival countdowns computed against the feed's own timestamp (the type-4 line), so they stay correct even if the board's clock is wrong |
 | BUS-05 | `ReturnList` kept to the five fields actually rendered, per TfL's guidance; `ExpireTime` requested alongside `EstimatedTime` as the spec requires |
 | BUS-06 | Predictions arrive unordered and are sorted soonest-first before display |
 | BUS-07 | The response is read with a bounded line buffer and a total byte cap (`BUS_MAX_RESPONSE`), so a malformed or huge response cannot exhaust the heap |
@@ -139,6 +213,12 @@ system via the "URA" instant interface, documented in
 | BUS-09 | An unknown stop code (HTTP 416) is a configuration error: logged once, retried only every 5 minutes, and the bus screen is withheld entirely |
 | BUS-10 | Zero arrivals is a valid result ("No buses due"), not a fetch failure |
 | BUS-11 | `RAW_BUS_DEBUG` build flag dumps the raw response lines for field verification |
+| BUS-12 | `StopAlso=True` is requested so the stop's **name** is returned even when it has no predictions — otherwise a quiet stop shows only its bare code |
+| BUS-13 | A Stop array is only two elements long, so line-length guards must not assume a minimum of three |
+| BUS-14 | Arrivals further ahead than `BUS_MAX_ETA_MINUTES` are discarded |
+| BUS-15 | The stop code and route filter are percent-encoded into the query string. (The feed additionally defines escaping \`a` for `&` and \`c` for `,` inside *values*; neither character is valid in a stop code or route name, so it does not arise) |
+| BUS-16 | Stops whose `StopCode1` is null or the literal string `"NONE"` are bus stands or withdrawn stops, not boardable, and are excluded from search results |
+| BUS-17 | Polling is no more frequent than `BUS_REFRESH_SECONDS` (30 s), matching the feed's cache — faster polling returns identical data |
 
 ---
 
@@ -179,8 +259,6 @@ generic and shareable.
 | ID | Requirement |
 |---|---|
 | DISP-01 | Show up to 3 next departures on the 320×170 canvas |
-| DISP-18 | Both boards share one layout: a header row (mode tag + station/stop name), three identical rows, then the clock |
-| DISP-19 | All three rows use the same font; times and statuses use the smaller font, vertically centred, so the destination column gets the width |
 | DISP-02 | Each row: scheduled time, destination, and service status (expected/on-time/cancelled) with platform when present |
 | DISP-03 | A destination too wide for its column scrolls horizontally, clipped so it never overwrites the status |
 | DISP-04 | `HIDE_ONTIME_STATUS` build option: hide "On time" to give destinations the full width |
@@ -193,10 +271,12 @@ generic and shareable.
 | DISP-11 | An invalid departure CRS (API returns HTTP 400) shows a dedicated red "Unknown station" screen, not a generic connectivity error |
 | DISP-12 | With a bus stop configured, the board cycles **trains for 30 s, then buses for 15 s**, repeating (`TRAIN_SCREEN_SECONDS` / `BUS_SCREEN_SECONDS`) |
 | DISP-13 | The bus screen shows up to 3 arrivals laid out like a train row: expected time, route number, destination, and a right-aligned countdown ("Due" under a minute, otherwise "N min") |
-| DISP-17 | The header shows the station/stop name in the large font, with a small dim "TRAIN" / "BUS" (or "BUS <route>") tag beside it |
 | DISP-14 | Bus countdowns tick down live between polls rather than freezing for the 30 s poll interval |
 | DISP-15 | The bus screen is only entered once TfL has answered successfully for the stop at least once; an unconfigured or rejected stop leaves the train board permanently on screen |
 | DISP-16 | Marquees reset on every screen change, so long names restart rather than resuming mid-scroll |
+| DISP-17 | The header shows the station/stop name in the large font, with a small dim "TRAIN" / "BUS" (or "BUS <route>") tag beside it |
+| DISP-18 | Both boards share one layout: a header row (mode tag + station/stop name), three identical rows, then the clock |
+| DISP-19 | All three rows use the same font; times and statuses use the smaller font, vertically centred, so the destination column gets the width |
 
 ---
 
@@ -209,9 +289,12 @@ Newline-terminated line protocol on the USB CDC serial port (`src/config.cpp`).
 | PROV-01 | `PING` → `PONG Esp32Departures` (discovery/handshake) |
 | PROV-02 | `CFG <key>=<value>` → `ACK <key>` (stages a value) |
 | PROV-03 | `COMMIT` → `SAVED`, then the device saves to NVS and reboots |
-| PROV-04 | `GET` → current config with secrets masked, then `END` |
+| PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
 | PROV-05 | Protocol available whether provisioned or not, so reconfiguration always works |
 | PROV-06 | Host opens serial with `dtr=True, rts=False` to avoid resetting the ESP32-S3 |
+| PROV-07 | `GET` never returns a secret: the API key is not reported at all and the WiFi password only as `passlen` (its length), which distinguishes an empty or truncated password from a wrong one |
+| PROV-08 | `SCAN` → one `SSID|rssi=|ch=|auth=` line per visible network, then `END`. The ESP32-S3 has no 5 GHz radio, so a network missing here but visible on a phone is the usual explanation for a board that will not connect |
+| PROV-09 | A `COMMIT` stages on top of the current config, so **omitting** a key preserves its stored value — the mechanism INST-11 relies on to avoid retyping secrets |
 
 ---
 
@@ -226,14 +309,20 @@ PyInstaller) that flashes the firmware and provisions the board.
 | INST-02 | Auto-detects the board's COM port (prefers Espressif VID 0x303A); prompts if several devices |
 | INST-03 | Console wizard prompts for all settings with sensible defaults; WiFi password entry hidden |
 | INST-04 | Detects existing Esp32Departures firmware and offers three paths: change settings only, **update firmware only** (asks nothing, keeps all settings), or both |
-| INST-10 | The wizard pre-fills every prompt from the board's current config, read back over `GET` |
-| INST-11 | The WiFi password and API key — the only two values the board will not read back — accept a blank answer meaning "keep"; `provision()` then omits that key so the firmware's COMMIT preserves it |
-| INST-12 | Re-flashing the app does not disturb settings: they live in a separate NVS partition |
 | INST-05 | Flashes bootloader (0x0), partitions (0x8000), boot_app0 (0xe000), firmware (0x10000) via esptool |
 | INST-06 | After flashing, re-detects the (possibly re-enumerated) port before provisioning |
 | INST-07 | Provisions over serial using the PROV protocol; confirms `SAVED` |
 | INST-08 | `--auto <cfg.json>` non-interactive mode for testing/automation |
 | INST-09 | Never persists entered secrets to disk; they go straight to the device |
+| INST-10 | The wizard pre-fills every prompt from the board's current config, read back over `GET` |
+| INST-11 | The WiFi password and API key — the only two values the board will not read back — accept a blank answer meaning "keep"; `provision()` then omits that key so the firmware's COMMIT preserves it |
+| INST-12 | Re-flashing the app does not disturb settings: they live in a separate NVS partition |
+| INST-13 | **Bus stop search:** one prompt accepts a postcode, a place/stop name, or a 5-digit stop code, and works out which was entered rather than making the user pick a search mode first |
+| INST-14 | A place or postcode resolves to coordinates, then to a list of nearby stops showing the **direction each serves** (`Towards`) and its distance, so the user can pick the correct side of the road |
+| INST-15 | Name matches that share a name are the same place indexed several times (one per station entrance) and are searched together, not offered as identical-looking choices |
+| INST-16 | The chosen stop is verified against the live feed and the next few arrivals printed, so a wrong stop is caught before anything is written to the board |
+| INST-17 | A blank answer at the stop search **keeps** an already-configured stop; only a board with no stop treats blank as "skip" |
+| INST-18 | Screen-blank hours are echoed back as an off-window with its duration, and an off-window longer than half a day must be confirmed — entering START/END the wrong way round blanks the board for most of the day and reads as broken hardware |
 
 ---
 
@@ -244,7 +333,7 @@ PyInstaller) that flashes the firmware and provisions the board.
 | ARCH-01 | API fetch uses exponential back-off on failure: 2s → 4s → 8s → … → 120s cap |
 | ARCH-02 | On API failure, the last-known departures stay on screen with a "No signal (Nx)" overlay |
 | ARCH-03 | After 3 consecutive failures, a dedicated connectivity-warning screen is shown |
-| ARCH-04 | No data yet → a welcome/loading screen (never a blank or crash) |
+| ARCH-04 | No data yet → a dim "No departures" / "No buses due" message under the header, never a blank screen or a crash. (Replaced the earlier "Welcome to <station>" screen, which duplicated the station name now shown in the header) |
 | ARCH-05 | Two-core split: fetch task on core 0, render loop on core 1 |
 | ARCH-06 | Shared departure state guarded by a FreeRTOS mutex; render never fetches, fetch never draws |
 | ARCH-07 | Fetch TLS task given a 16 KB stack (mbedTLS handshakes are stack-hungry) |
