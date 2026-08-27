@@ -336,7 +336,7 @@ void renderSetup() {
     spr.setFont(&fonts::FreeSans9pt7b);
     spr.setTextColor(DIM, BLACK);
     const char* l1 = "Connect USB and run";
-    const char* l2 = "the Esp32Departures installer";
+    const char* l2 = "the Departure Buddy installer";
     spr.setCursor((W - spr.textWidth(l1)) / 2, 82);
     spr.print(l1);
     spr.setCursor((W - spr.textWidth(l2)) / 2, 104);

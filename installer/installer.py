@@ -1,4 +1,4 @@
-"""Esp32Departures installer — console wizard.
+"""Departure Buddy installer — console wizard.
 
 Flashes the bundled firmware to a LilyGo T-Display-S3 and configures it (WiFi,
 National Rail LDBWS key, station, filters, an optional London bus stop, an
@@ -69,7 +69,7 @@ def validate_station(key, crs):
     url = ("https://api1.raildata.org.uk/1010-live-departure-board-dep1_2/LDBWS/"
            f"api/20220120/GetDepBoardWithDetails/{crs}?numRows=1&timeWindow=30")
     req = urllib.request.Request(
-        url, headers={"x-apikey": key, "User-Agent": "Esp32Departures-installer"})
+        url, headers={"x-apikey": key, "User-Agent": "DepartureBuddy-installer"})
     try:
         with urllib.request.urlopen(req, timeout=12) as r:
             return ("ok", "") if r.status == 200 else ("net", f"HTTP {r.status}")
@@ -126,7 +126,7 @@ def _http_json_lines(url, timeout=15):
     import urllib.request
     import urllib.error
     req = urllib.request.Request(
-        url, headers={"User-Agent": "Esp32Departures-installer"})
+        url, headers={"User-Agent": "DepartureBuddy-installer"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = r.read().decode("utf-8", "replace")
@@ -212,7 +212,7 @@ def geocode_place(query):
     import urllib.request
     url = ("https://api.tfl.gov.uk/StopPoint/Search?query="
            + urllib.parse.quote(query) + "&modes=bus&maxResults=6")
-    req = urllib.request.Request(url, headers={"User-Agent": "Esp32Departures-installer"})
+    req = urllib.request.Request(url, headers={"User-Agent": "DepartureBuddy-installer"})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             d = json.loads(r.read().decode("utf-8", "replace"))
@@ -231,7 +231,7 @@ def geocode_postcode(postcode):
     import urllib.parse
     import urllib.request
     url = "https://api.postcodes.io/postcodes/" + urllib.parse.quote(postcode.replace(" ", ""))
-    req = urllib.request.Request(url, headers={"User-Agent": "Esp32Departures-installer"})
+    req = urllib.request.Request(url, headers={"User-Agent": "DepartureBuddy-installer"})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             d = json.loads(r.read().decode("utf-8", "replace"))
@@ -420,7 +420,7 @@ def _tfl_json(path, timeout=15):
     """GET a Unified API path and return the decoded JSON, or None."""
     import urllib.request
     req = urllib.request.Request(
-        TFL_API + path, headers={"User-Agent": "Esp32Departures-installer"})
+        TFL_API + path, headers={"User-Agent": "DepartureBuddy-installer"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
@@ -478,7 +478,7 @@ def river_arrivals(pier, line_filter=""):
     import urllib.error
     req = urllib.request.Request(
         "%s/StopPoint/%s/Arrivals" % (TFL_API, pier),
-        headers={"User-Agent": "Esp32Departures-installer"})
+        headers={"User-Agent": "DepartureBuddy-installer"})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             data = json.loads(r.read().decode("utf-8", "replace"))
@@ -614,7 +614,7 @@ def read_lines(ser, secs, echo=False):
 
 
 def probe(port, timeout=3.0):
-    """Return True if Esp32Departures firmware answers PING on this port."""
+    """Return True if Departure Buddy firmware answers PING on this port."""
     try:
         ser = open_serial(port)
     except Exception:
@@ -969,7 +969,7 @@ def pick_port():
 
 def run_interactive():
     print("=" * 44)
-    print(" Esp32Departures Installer  (T-Display-S3)")
+    print(" Departure Buddy Installer  (T-Display-S3)")
     print("=" * 44)
 
     input("\nPlug the board into USB, then press Enter...")
@@ -995,7 +995,7 @@ def run_interactive():
                 shows.append(current.get("rivername") or f"pier {current['river']}")
             print(f"\nBoard is showing {' and '.join(shows) or 'nothing yet'} "
                   f"on WiFi '{current.get('ssid', '?')}'.")
-        choice = input("\nBoard already has Esp32Departures firmware.\n"
+        choice = input("\nBoard already has Departure Buddy firmware.\n"
                        "  [C] Change settings (keeps the firmware)\n"
                        "  [U] Update firmware only - keeps all your settings\n"
                        "  [F] Update firmware AND change settings\n"

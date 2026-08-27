@@ -1,4 +1,4 @@
-# Esp32Departures — UK Train, London Bus & River Boat Board (LilyGo T-Display-S3)
+# Departure Buddy — UK Train, London Bus & River Boat Board (LilyGo T-Display-S3)
 
 A C++/JSON rewrite of the [Raspberry Pi departure board](https://github.com/OktaneZA/PiDepartures) for the
 **LilyGo T-Display-S3** (ESP32-S3, 1.9″ 170×320 ST7789 LCD). No Pi, no Docker, no
@@ -82,7 +82,7 @@ no editing files, no compiling:
 1. Get a LilyGo T-Display-S3 and a free LDBWS API key. The
    **[installer README](installer/README.md)** has the hardware buying links and a
    step-by-step raildata.org.uk walkthrough for the key.
-2. Plug the board into USB and run **`Esp32DeparturesInstaller.exe`**.
+2. Plug the board into USB and run **`DepartureBuddyInstaller.exe`**.
 3. Answer the prompts. It asks first which services you want — **trains,
    London buses, river boats**, any combination — then only what those need. A
    boats-only board is never asked for an API key or a station, and the pier is

@@ -81,7 +81,7 @@ Fetch fetchArrivals(const Config& cfg, std::vector<RiverArrival>& out, String& p
     http.setTimeout(15000);
     http.setConnectTimeout(15000);
     if (!http.begin(client, url)) return Fetch::Failed;
-    http.addHeader("User-Agent", "Esp32Departures/1.0");
+    http.addHeader("User-Agent", "DepartureBuddy/1.0");
     http.useHTTP10(true);   // plain unchunked body the reader below can bound
 
     int code = http.GET();

@@ -128,7 +128,7 @@ Fetch fetchDepartures(const Config& cfg, std::vector<Departure>& out,
     http.setConnectTimeout(15000);
     if (!http.begin(client, url)) return Fetch::Failed;
     http.addHeader("x-apikey", cfg.api_key);
-    http.addHeader("User-Agent", "Esp32Departures/1.0");
+    http.addHeader("User-Agent", "DepartureBuddy/1.0");
     http.useHTTP10(true);  // plain HTTP/1.0 body — friendliest for ArduinoJson streams
 
     int code = http.GET();

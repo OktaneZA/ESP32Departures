@@ -1,8 +1,8 @@
-# Esp32Departures — Requirements
+# Departure Buddy — Requirements
 
 ## Overview
 
-**Esp32Departures** is a UK National Rail departure board that runs on a **LilyGo
+**Departure Buddy** is a UK National Rail departure board that runs on a **LilyGo
 T-Display-S3** (ESP32-S3) microcontroller. It fetches live departures over WiFi
 directly from the National Rail Live Departure Board (LDBWS) JSON API and renders
 them on the board's built-in 170×320 colour LCD — no host computer, server, or
@@ -25,7 +25,7 @@ the delivered firmware and installer actually satisfy.
 - **Native Raspberry Pi rewrite:** [OktaneZA/PiDepartures](https://github.com/OktaneZA/PiDepartures)
   — replaced Balena/Docker with a native systemd deployment and the OpenLDBWS
   SOAP client. This ESP32 project began life inside that repo before being split out.
-- **This project (Esp32Departures):** a from-scratch C++ port of that behaviour to
+- **This project (Departure Buddy):** a from-scratch C++ port of that behaviour to
   the ESP32-S3, replacing Python/SOAP with Arduino/JSON and adding a self-contained
   Windows installer that provisions the board over USB.
 
@@ -312,6 +312,11 @@ Settings are stored in NVS (namespace `esp32dep`) and set by the installer over
 serial. **No settings are compiled into the binary**, so one firmware image is
 generic and shareable.
 
+The namespace keeps its original `esp32dep` spelling despite the rename to
+Departure Buddy: it is a storage key, not a label. Changing it would orphan the
+settings on every board already in the field, which would boot to "Awaiting
+setup" having silently lost its WiFi, API key and station.
+
 | Key | Required | Default | Description |
 |---|---|---|---|
 | `ssid` | Yes | — | WiFi network name (2.4 GHz) |
@@ -381,7 +386,7 @@ Newline-terminated line protocol on the USB CDC serial port (`src/config.cpp`).
 
 | ID | Requirement |
 |---|---|
-| PROV-01 | `PING` → `PONG Esp32Departures` (discovery/handshake) |
+| PROV-01 | `PING` → `PONG Departure Buddy` (discovery/handshake). The installer matches the bare `PONG` token, never the product name after it, so the banner is informational — a rename does not stop a new installer recognising an old board, or an old installer a new one |
 | PROV-02 | `CFG <key>=<value>` → `ACK <key>` (stages a value) |
 | PROV-03 | `COMMIT` → `SAVED`, then the device saves to NVS and reboots |
 | PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `river`, `riverline`, `rivername`, `mode`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
@@ -394,7 +399,7 @@ Newline-terminated line protocol on the USB CDC serial port (`src/config.cpp`).
 
 ---
 
-## 7. Installer (`Esp32DeparturesInstaller.exe`)
+## 7. Installer (`DepartureBuddyInstaller.exe`)
 
 A self-contained Windows 10/11 executable (`installer/installer.py`, packaged with
 PyInstaller) that flashes the firmware and provisions the board.
@@ -404,7 +409,7 @@ PyInstaller) that flashes the firmware and provisions the board.
 | INST-01 | Single `.exe`; bundles firmware binaries, esptool, and pyserial — no Python/toolchain on the target PC |
 | INST-02 | Auto-detects the board's COM port (prefers Espressif VID 0x303A); prompts if several devices |
 | INST-03 | Console wizard prompts for all settings with sensible defaults; WiFi password entry hidden |
-| INST-04 | Detects existing Esp32Departures firmware and offers three paths: change settings only, **update firmware only** (asks nothing, keeps all settings), or both |
+| INST-04 | Detects existing Departure Buddy firmware and offers three paths: change settings only, **update firmware only** (asks nothing, keeps all settings), or both |
 | INST-05 | Flashes bootloader (0x0), partitions (0x8000), boot_app0 (0xe000), firmware (0x10000) via esptool |
 | INST-06 | After flashing, re-detects the (possibly re-enumerated) port before provisioning |
 | INST-07 | Provisions over serial using the PROV protocol; confirms `SAVED` |

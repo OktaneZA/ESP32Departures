@@ -117,7 +117,7 @@ Fetch fetchArrivals(const Config& cfg, std::vector<BusArrival>& out, String& sto
     http.setTimeout(15000);
     http.setConnectTimeout(15000);
     if (!http.begin(client, url)) return Fetch::Failed;
-    http.addHeader("User-Agent", "Esp32Departures/1.0");
+    http.addHeader("User-Agent", "DepartureBuddy/1.0");
     // HTTP/1.0 makes the server answer with a plain, unchunked body it closes at
     // the end — exactly what the bounded line reader below wants.
     http.useHTTP10(true);

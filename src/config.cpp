@@ -4,7 +4,7 @@
 // the installer sets it over serial. Line-based protocol (newline-terminated),
 // all replies newline-terminated:
 //
-//   PING                 -> PONG Esp32Departures
+//   PING                 -> PONG Departure Buddy
 //   CFG <key>=<value>    -> ACK <key>        (stages a value)
 //   COMMIT               -> SAVED, then reboots into the new config
 //   GET                  -> key=value lines (secrets masked), then END
@@ -147,7 +147,7 @@ void handle_line(String line) {
     if (line.isEmpty()) return;
 
     if (line == "PING") {
-        Serial.println("PONG Esp32Departures");
+        Serial.println("PONG Departure Buddy");
     } else if (line.startsWith("CFG ")) {
         stage_kv(line.substring(4));
     } else if (line == "COMMIT") {

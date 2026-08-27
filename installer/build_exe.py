@@ -2,7 +2,7 @@
 
     python build_exe.py
 
-Produces dist/Esp32DeparturesInstaller.exe — a self-contained Win 10/11 executable
+Produces dist/DepartureBuddyInstaller.exe — a self-contained Win 10/11 executable
 that bundles the firmware binaries, esptool, and pyserial. No Python or toolchain
 needed on the target PC.
 """
@@ -19,7 +19,7 @@ PyInstaller.__main__.run([
     "--console",
     "--clean",
     "--noconfirm",
-    "--name", "Esp32DeparturesInstaller",
+    "--name", "DepartureBuddyInstaller",
     # Bundle the four firmware binaries (Windows uses ';' as the data separator).
     "--add-data", "firmware;firmware",
     # esptool ships stub-flasher data + submodules that must be collected.
@@ -31,4 +31,4 @@ PyInstaller.__main__.run([
     "--collect-all", "tzlocal",
 ])
 
-print("\nBuilt dist/Esp32DeparturesInstaller.exe")
+print("\nBuilt dist/DepartureBuddyInstaller.exe")

@@ -1,4 +1,4 @@
-# Esp32Departures Installer
+# Departure Buddy Installer
 
 A self-contained **Windows 10/11** installer for the LilyGo T-Display-S3 departure
 board. It flashes the firmware and configures it (WiFi, National Rail LDBWS key,
@@ -6,7 +6,7 @@ station, filters, an optional London bus stop, an optional Thames pier, blank
 hours, brightness) over USB — **no Python, PlatformIO, or toolchain needed** on
 the target PC.
 
-*Part of Esp32Departures, derived from
+*Part of Departure Buddy, derived from
 [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display).*
 
 ## The hardware you need
@@ -62,7 +62,7 @@ needs no key.
 ## For end users
 
 1. Plug the T-Display-S3 into a USB-C port.
-2. Double-click **`Esp32DeparturesInstaller.exe`**.
+2. Double-click **`DepartureBuddyInstaller.exe`**.
 3. Follow the prompts (it auto-detects the board's COM port).
 4. When it says *Done*, the board reboots and shows live departures.
 
@@ -315,7 +315,7 @@ Requires Python 3.x with these packages:
 
 ```bash
 pip install pyserial "esptool>=4.7,<5" pyinstaller
-python build_exe.py      # -> dist/Esp32DeparturesInstaller.exe
+python build_exe.py      # -> dist/DepartureBuddyInstaller.exe
 ```
 
 The bundled firmware binaries live in `installer/firmware/` and are produced by

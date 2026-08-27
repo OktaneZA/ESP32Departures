@@ -264,7 +264,7 @@ static bool isBlankHour() {
 void setup() {
     Serial.begin(115200);
     delay(200);
-    Serial.println("\n[boot] Esp32Departures - T-Display-S3");
+    Serial.println("\n[boot] Departure Buddy - T-Display-S3");
 
     cfg::load();
     const Config& c = cfg::get();
@@ -287,9 +287,9 @@ void setup() {
         }
     }
 
-    ui::showStartup("Esp32Departures","Connecting to WiFi...");
+    ui::showStartup("Departure Buddy","Connecting to WiFi...");
     connectWiFi();
-    ui::showStartup("Esp32Departures","Syncing clock...");
+    ui::showStartup("Departure Buddy","Syncing clock...");
     syncTime();
 
     // 16 KB stack — mbedTLS handshakes are stack-hungry.
@@ -425,7 +425,7 @@ void loop() {
         if (worst >= 3) {
             ui::renderConnectivityWarning(label, worst);
         } else {
-            ui::showStartup("Esp32Departures", "Loading arrivals...");
+            ui::showStartup("Departure Buddy", "Loading arrivals...");
         }
     } else if (screen == Screen::Bus) {
         ui::renderBusBoard(bus, busStop, c.bus_line, millis() - busFetchedMs, busErr);
