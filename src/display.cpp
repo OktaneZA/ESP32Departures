@@ -1,10 +1,16 @@
 // Display + rendering for the LilyGo T-Display-S3 (ST7789, 170x320, 8-bit i80).
 //
 // Uses LovyanGFX with a full-frame sprite in PSRAM as a back buffer so the
-// scrolling calling-points line and ticking clock render without flicker.
+// scrolling destinations and ticking clock render without flicker.
 //
 // Layout is landscape 320x170 (rotation 1) — a wide "platform sign" shape,
 // reimagining the Python app's 256x64 board with room for a big clock.
+//
+// Three boards are drawn here — trains, London buses and river boats — and they
+// deliberately share one layout: a header row (mode tag + station/stop/pier
+// name), three identical rows, then the clock. The shared geometry constants,
+// drawHeader() and drawArrivalsBoard() below are what keep them from drifting
+// apart; buses and boats differ only in their tag and their "nothing due" text.
 
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
@@ -85,13 +91,123 @@ struct RowScroll {
     int offset = 0;
 };
 RowScroll s_rowScroll[MAX_DEPARTURES];
+RowScroll s_busScroll[MAX_BUS_ARRIVALS];
+RowScroll s_riverScroll[MAX_RIVER_ARRIVALS];
+RowScroll s_headerScroll;
+
+// All three boards share one layout so they read as the same instrument: a
+// header row naming the mode and the station/stop/pier, then three identical
+// rows, then the clock. Times sit in the small font — they are fixed-width and always legible,
+// so shrinking them buys the destination column ~20px it can actually use.
+const lgfx::IFont* const HEAD_FONT  = &fonts::FreeSansBold12pt7b;
+const lgfx::IFont* const ROW_FONT   = &fonts::FreeSans12pt7b;
+const lgfx::IFont* const SMALL_FONT = &fonts::FreeSans9pt7b;
+
+constexpr int ROW_Y0   = 32;   // first row baseline-top, below the header
+constexpr int ROW_STEP = 28;   // vertical pitch between rows
+constexpr int CLOCK_Y  = 120;
+
+constexpr int TRAIN_DEST_X = 48;   // after the (now smaller) departure time
+constexpr int BUS_ROUTE_X  = 48;   // after the (now smaller) arrival time
+constexpr int BUS_DEST_X   = 100;  // after the route number
+
+// Draw `text` at (x, y), scrolling it horizontally when it is wider than `maxW`.
+// Two copies separated by a gap give a seamless loop; the clip rect stops the
+// text spilling into whatever sits to its right. Returns nothing — `st` carries
+// the per-row offset between frames.
+void drawScrolling(RowScroll& st, const String& text, int x, int y, int maxW, int rowH) {
+    int w = spr.textWidth(text);
+    if (w <= maxW) {
+        st.text = text;
+        st.offset = 0;
+        spr.setCursor(x, y);
+        spr.print(text);
+        return;
+    }
+    if (st.text != text) { st.text = text; st.offset = 0; }
+    const int gap = 32;
+    spr.setClipRect(x, y - 2, maxW, rowH + 6);
+    spr.setCursor(x + st.offset, y);
+    spr.print(text);
+    spr.setCursor(x + st.offset + w + gap, y);
+    spr.print(text);
+    spr.clearClipRect();
+    st.offset -= 1;                              // scroll speed (px/frame)
+    if (st.offset <= -(w + gap)) st.offset = 0;  // wrap
+}
+
+// Header row: a small dim mode tag ("TRAIN" / "BUS" / "BUS 38") followed by the
+// station or stop name in the large font, scrolling if it overflows.
+void drawHeader(const String& tag, const String& name) {
+    spr.setFont(SMALL_FONT);
+    int tagH = spr.fontHeight();
+    int tagW = spr.textWidth(tag) + 10;
+
+    spr.setFont(HEAD_FONT);
+    int headH = spr.fontHeight();
+
+    spr.setFont(SMALL_FONT);
+    spr.setTextColor(DIM, BLACK);
+    spr.setCursor(0, (headH - tagH) / 2);   // centred against the taller name
+    spr.print(tag);
+
+    spr.setFont(HEAD_FONT);
+    spr.setTextColor(AMBER, BLACK);
+    drawScrolling(s_headerScroll, name, tagW, 0, W - tagW, headH);
+}
+
+// "Due" under a minute out, otherwise whole minutes — the wording TfL's own
+// Countdown signs use.
+String formatEta(int32_t seconds) {
+    if (seconds < 60) return String("Due");
+    return String(seconds / 60) + " min";
+}
+
+// The "HH:MM" the bus is actually expected, `seconds` from now.
+String clockTimeIn(int32_t seconds) {
+    time_t t = time(nullptr) + seconds;
+    struct tm tm;
+    localtime_r(&t, &tm);
+    char buf[8];
+    strftime(buf, sizeof(buf), "%H:%M", &tm);
+    return String(buf);
+}
+
+// One arrival row: [expected time] [route] [destination] [countdown right-aligned].
+// Time and countdown use the small font; route and destination the row font.
+// Shared by the bus and river screens — a boat's "RB1" sits where a bus's "38"
+// does — with the caller passing the marquee state for its own screen.
+void drawArrivalRow(int y, RowScroll& scroll, const BusArrival& ar) {
+    String eta = formatEta(ar.etaSeconds);
+    String when = clockTimeIn(ar.etaSeconds);
+
+    spr.setFont(ROW_FONT);
+    int rowH = spr.fontHeight();
+
+    spr.setFont(SMALL_FONT);
+    int smallH = spr.fontHeight();
+    int ew = spr.textWidth(eta);
+    int smallDy = (rowH - smallH) / 2;          // sit the small text on the row's centre
+    spr.setTextColor(AMBER, BLACK);
+    spr.setCursor(0, y + smallDy);
+    spr.print(when);
+    spr.setCursor(W - ew, y + smallDy);
+    spr.print(eta);
+
+    spr.setFont(ROW_FONT);
+    spr.setTextColor(AMBER, BLACK);
+    spr.setCursor(BUS_ROUTE_X, y);
+    spr.print(ar.line);
+
+    const int destMax = W - BUS_DEST_X - ew - 8;
+    drawScrolling(scroll, ar.destination, BUS_DEST_X, y, destMax, rowH);
+}
 
 // One departure row: [time]  [destination...]  [right-aligned status (+platform)].
 // The status uses a smaller font than the row so the destination gets more width.
 // If the destination is wider than its column it scrolls (marquee), clipped so
 // it never overwrites the status.
-void drawRow(int y, int idx, const Departure& dep, const lgfx::IFont* rowFont,
-             const lgfx::IFont* statusFont) {
+void drawRow(int y, int idx, const Departure& dep) {
     uint16_t colour = dep.cancelled ? RED : AMBER;
 
     String right = dep.status;
@@ -102,55 +218,30 @@ void drawRow(int y, int idx, const Departure& dep, const lgfx::IFont* rowFont,
     bool onTime = !dep.cancelled && dep.status == "On time";
     bool showStatus = !(HIDE_ONTIME_STATUS && onTime && dep.platform.length() == 0);
 
-    int rw = 0, statusH = 0;
-    if (showStatus) {
-        spr.setFont(statusFont);
-        rw = spr.textWidth(right);
-        statusH = spr.fontHeight();
-    }
-
-    // Time (never scrolls).
-    spr.setFont(rowFont);
+    spr.setFont(ROW_FONT);
     int rowH = spr.fontHeight();
+
+    // Time and status share the small font, vertically centred on the row.
+    spr.setFont(SMALL_FONT);
+    int smallH = spr.fontHeight();
+    int smallDy = (rowH - smallH) / 2;
+    int rw = showStatus ? spr.textWidth(right) : 0;
     spr.setTextColor(AMBER, BLACK);
-    spr.setCursor(0, y);
+    spr.setCursor(0, y + smallDy);
     spr.print(dep.aimed);
-
-    // Destination column runs from destX up to the status (or the right edge).
-    const int destX = 70;
-    const int destMax = W - destX - (showStatus ? rw + 8 : 4);
-    int destW = spr.textWidth(dep.destination);
-    spr.setTextColor(colour, BLACK);
-
-    if (destW <= destMax) {
-        // Fits — draw statically and clear any scroll for this row.
-        s_rowScroll[idx].text = dep.destination;
-        s_rowScroll[idx].offset = 0;
-        spr.setCursor(destX, y);
-        spr.print(dep.destination);
-    } else {
-        // Too long — marquee within the column, clipped so it never reaches the
-        // status. Two copies with a gap give a seamless loop (DISP-03 style).
-        RowScroll& st = s_rowScroll[idx];
-        if (st.text != dep.destination) { st.text = dep.destination; st.offset = 0; }
-        const int gap = 32;
-        spr.setClipRect(destX, y - 2, destMax, rowH + 6);
-        spr.setCursor(destX + st.offset, y);
-        spr.print(dep.destination);
-        spr.setCursor(destX + st.offset + destW + gap, y);
-        spr.print(dep.destination);
-        spr.clearClipRect();
-        st.offset -= 1;                                    // scroll speed (px/frame)
-        if (st.offset <= -(destW + gap)) st.offset = 0;    // wrap
-    }
-
-    // Status right-aligned, vertically centred against the taller row font.
     if (showStatus) {
-        spr.setFont(statusFont);
         spr.setTextColor(colour, BLACK);
-        spr.setCursor(W - rw, y + (rowH - statusH) / 2);
+        spr.setCursor(W - rw, y + smallDy);
         spr.print(right);
     }
+
+    // Destination column runs from TRAIN_DEST_X up to the status (or the right
+    // edge); a name too wide for it marquees, clipped so it never reaches the
+    // status (DISP-03).
+    spr.setFont(ROW_FONT);
+    const int destMax = W - TRAIN_DEST_X - (showStatus ? rw + 8 : 4);
+    spr.setTextColor(colour, BLACK);
+    drawScrolling(s_rowScroll[idx], dep.destination, TRAIN_DEST_X, y, destMax, rowH);
 }
 
 // Centred clock (HH:MM:SS), drawn from local time each frame.
@@ -166,6 +257,49 @@ void drawClock(int y) {
     int tw = spr.textWidth(timeStr);
     spr.setCursor((W - tw) / 2, y);
     spr.print(timeStr);
+}
+
+// Stale-data indicator: the feed is failing but the last good data is still on
+// screen. Every board draws it the same way, in the same corner.
+void drawStaleIndicator(int errCount) {
+    if (errCount <= 0) return;
+    char msg[24];
+    snprintf(msg, sizeof(msg), "No signal (%dx)", errCount);
+    spr.setFont(&fonts::Font0);
+    spr.setTextColor(RED, BLACK);
+    spr.setCursor(2, H - 10);
+    spr.print(msg);
+}
+
+// The whole of a bus or river board: header, up to three rows counted down from
+// the moment of the fetch, clock, and the stale-data marker. The two screens are
+// the same instrument pointed at a different feed, so they are the same code.
+void drawArrivalsBoard(const String& tag, const String& name,
+                       const std::vector<BusArrival>& arrivals, RowScroll* scroll,
+                       size_t maxRows, const char* emptyMsg,
+                       uint32_t sinceFetchMs, int errCount) {
+    spr.fillScreen(BLACK);
+    drawHeader(tag, name);
+
+    if (arrivals.empty()) {
+        spr.setFont(HEAD_FONT);
+        spr.setTextColor(DIM, BLACK);
+        spr.setCursor((W - spr.textWidth(emptyMsg)) / 2, 52);
+        spr.print(emptyMsg);
+    } else {
+        // Count the ETAs down from the moment of the fetch, so the numbers keep
+        // moving between polls instead of freezing until the next one.
+        int32_t elapsed = (int32_t)(sinceFetchMs / 1000);
+        for (size_t i = 0; i < arrivals.size() && i < maxRows; ++i) {
+            BusArrival ar = arrivals[i];
+            ar.etaSeconds = ar.etaSeconds > elapsed ? ar.etaSeconds - elapsed : 0;
+            drawArrivalRow(ROW_Y0 + (int)i * ROW_STEP, scroll[i], ar);
+        }
+    }
+
+    drawClock(CLOCK_Y);
+    drawStaleIndicator(errCount);
+    spr.pushSprite(0, 0);
 }
 
 }  // namespace
@@ -229,40 +363,51 @@ void renderBoard(const std::vector<Departure>& deps, const String& station,
                  const String& callingAt, int errCount) {
     spr.fillScreen(BLACK);
 
+    drawHeader("TRAIN", station);
+
     if (deps.empty()) {
-        // No data yet / no services — welcome screen with clock (mirrors ARCH-04).
-        spr.setFont(&fonts::FreeSansBold12pt7b);
-        spr.setTextColor(AMBER, BLACK);
-        String welcome = "Welcome to";
-        String st = station;
-        int ww = spr.textWidth(welcome);
-        spr.setCursor((W - ww) / 2, 20);
-        spr.print(welcome);
-        int sw = spr.textWidth(st);
-        spr.setCursor((W - sw) / 2, 48);
-        spr.print(st);
-        drawClock(105);
+        // No data yet / no services — never blank, never a crash (ARCH-04).
+        spr.setFont(HEAD_FONT);
+        spr.setTextColor(DIM, BLACK);
+        const char* msg = "No departures";
+        spr.setCursor((W - spr.textWidth(msg)) / 2, 52);
+        spr.print(msg);
     } else {
-        // Top three departures, larger type and roomier spacing (no calling-at
-        // line, no date). Row 1 bold; status in the smaller 9pt font.
-        drawRow(6, 0, deps[0], &fonts::FreeSansBold12pt7b, &fonts::FreeSans9pt7b);
-        if (deps.size() > 1) drawRow(42, 1, deps[1], &fonts::FreeSans12pt7b, &fonts::FreeSans9pt7b);
-        if (deps.size() > 2) drawRow(78, 2, deps[2], &fonts::FreeSans12pt7b, &fonts::FreeSans9pt7b);
-        drawClock(120);
+        // Top three departures, all in the same row font so the board reads as
+        // one list rather than a headline plus also-rans.
+        for (size_t i = 0; i < deps.size() && i < MAX_DEPARTURES; ++i) {
+            drawRow(ROW_Y0 + (int)i * ROW_STEP, (int)i, deps[i]);
+        }
     }
+    drawClock(CLOCK_Y);
     (void)callingAt;  // calling-at line removed from the layout
 
-    // Stale-data indicator: API is failing but we're still showing last-good data.
-    if (errCount > 0) {
-        char msg[24];
-        snprintf(msg, sizeof(msg), "No signal (%dx)", errCount);
-        spr.setFont(&fonts::Font0);
-        spr.setTextColor(RED, BLACK);
-        spr.setCursor(2, H - 10);
-        spr.print(msg);
-    }
-
+    drawStaleIndicator(errCount);
     spr.pushSprite(0, 0);
+}
+
+void renderBusBoard(const std::vector<BusArrival>& arrivals, const String& stopName,
+                    const String& lineFilter, uint32_t sinceFetchMs, int errCount) {
+    drawArrivalsBoard(lineFilter.length() ? ("BUS " + lineFilter) : String("BUS"),
+                      stopName, arrivals, s_busScroll, MAX_BUS_ARRIVALS,
+                      "No buses due", sinceFetchMs, errCount);
+}
+
+void renderRiverBoard(const std::vector<RiverArrival>& arrivals, const String& pierName,
+                      const String& lineFilter, uint32_t sinceFetchMs, int errCount) {
+    // "RIVER" rather than "BOAT": it is what TfL calls the mode, and it is what
+    // is printed on the piers the board is quoting.
+    drawArrivalsBoard(lineFilter.length() ? ("RIVER " + lineFilter) : String("RIVER"),
+                      pierName, arrivals, s_riverScroll, MAX_RIVER_ARRIVALS,
+                      "No boats due", sinceFetchMs, errCount);
+}
+
+void resetScroll() {
+    for (auto& r : s_rowScroll) { r.text = ""; r.offset = 0; }
+    for (auto& r : s_busScroll) { r.text = ""; r.offset = 0; }
+    for (auto& r : s_riverScroll) { r.text = ""; r.offset = 0; }
+    s_headerScroll.text = "";
+    s_headerScroll.offset = 0;
 }
 
 void renderConnectivityWarning(const String& station, int errCount) {
