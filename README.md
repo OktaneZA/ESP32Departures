@@ -1,10 +1,12 @@
-# Esp32Departures — UK Train & London Bus Board (LilyGo T-Display-S3)
+# Esp32Departures — UK Train, London Bus & River Boat Board (LilyGo T-Display-S3)
 
 A C++/JSON rewrite of the [Raspberry Pi departure board](https://github.com/OktaneZA/PiDepartures) for the
 **LilyGo T-Display-S3** (ESP32-S3, 1.9″ 170×320 ST7789 LCD). No Pi, no Docker, no
 server — the ESP32 fetches live UK train departures over WiFi and drives the
 built-in colour LCD directly. It can also show **live London bus arrivals** for
-one stop. Either service is optional — show trains, buses, or both.
+one stop and **live river boat sailings** (Uber Boat by Thames Clippers and the
+Woolwich Ferry) from one pier. Every service is optional — enable any
+combination and the board cycles through them.
 
 > **Credits.** Derived from Chris Crocker-White's
 > [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display)
@@ -20,36 +22,48 @@ replaced it.)
 
 ## What it looks like
 
-Both boards share one layout: a header row naming the mode and the station or
-stop, three rows, then the clock.
+All three screens share one layout: a header row naming the mode and the
+station, stop or pier, three rows, then the clock. The board cycles through
+whichever you have enabled.
 
-![Train departure board](docs/mockup-scroll-demo.png)
+![The train screen running on the board](docs/Train.jpg)
 
-*Departures for Motspur Park — per-train status ("On time" / "Exp HH:MM" /
-"Cancelled" in red), platform when present, and long destinations that scroll.*
+*Trains — departures for Motspur Park, with per-train status ("On time" /
+"Exp HH:MM" / "Cancelled" in red) and platform. Long destinations scroll, caught
+here mid-marquee on "London Waterloo".*
 
-![London bus arrivals board](docs/mockup-bus.png)
+![The bus screen running on the board](docs/Bus.jpg)
 
-*The bus screen — expected time, route number, destination, and a countdown
-that ticks down between polls.*
+*London buses — expected time, route number, destination, and a countdown that
+ticks down between polls. A hail & ride stop with a single K5 due.*
 
-(Both rendered by `docs/render_mockup.py`, which mirrors `src/display.cpp`
-pixel-for-pixel.)
+![The river screen running on the board](docs/River.jpg)
+
+*River boats — Uber Boat by Thames Clippers sailings from Vauxhall St George
+Wharf Pier, with the RB6 route where a bus route number would sit.*
+
+Two mockups rendered by `docs/render_mockup.py` — which mirrors
+`src/display.cpp` pixel-for-pixel — are also in `docs/` if you want the layout
+without a camera in the way.
 
 ![The board running on a LilyGo T-Display-S3](docs/Esp32-2.jpg)
 
-*The board running on a T-Display-S3 in a standard case. Photographed before the
-shared header row was added, so the on-screen layout differs slightly from the
-renders above.*
+*The board in a standard case. Photographed before the shared header row was
+added, so its on-screen layout differs slightly from the three above.*
 
 ## What it does
 
 - Live departures for a station (optionally filtered to a destination or platform)
-- **Trains, buses, or both** — you choose at setup. With both, the board cycles
-  trains for 30s then buses for 15s; with one, it stays on that screen
+- **Trains, buses, boats — any combination** — you choose at setup. The board
+  cycles through whatever is enabled (trains 30s, buses 15s, boats 15s); with a
+  single service it stays on that screen
 - **London bus arrivals** for one stop from TfL's open Countdown feed — expected
   time, route number, destination, and a "Due" / "N min" countdown that ticks
   between polls
+- **River boat sailings** for one Thames pier from TfL's open Unified API —
+  Uber Boat by Thames Clippers (RB1/RB4/RB6) and the Woolwich Ferry, drawn on
+  the same layout as the bus screen with the route ("RB1") where the bus number
+  goes. Real live predictions, not a timetable
 - Top three departures: time + destination, with status (delay/cancellation)
   and platform when relevant; long names scroll
 - Big NTP clock in a dot-matrix font, with automatic BST
@@ -66,9 +80,11 @@ no editing files, no compiling:
    **[installer README](installer/README.md)** has the hardware buying links and a
    step-by-step raildata.org.uk walkthrough for the key.
 2. Plug the board into USB and run **`Esp32DeparturesInstaller.exe`**.
-3. Answer the prompts. It asks first whether you want **trains, buses, or both**,
-   then only what that needs — a buses-only board is never asked for an API key
-   or a station. Done — the board reboots showing live times.
+3. Answer the prompts. It asks first which services you want — **trains,
+   London buses, river boats**, any combination — then only what those need. A
+   boats-only board is never asked for an API key or a station, and the pier is
+   picked by name from a list rather than by ID. Done — the board reboots
+   showing live times.
 
 Settings are stored **on the device**, so run the installer again any time. If a
 configured board is detected it offers three choices:
@@ -105,9 +121,11 @@ the board is provisioned at runtime (by the installer, or the serial protocol in
    is usually the fastest way to diagnose a board that will not connect.
 
 Compile-time tunables live in `include/app_config.h`: layout, back-off, time
-window, `HIDE_ONTIME_STATUS`, `RAW_JSON_DEBUG`, and the bus settings
+window, `HIDE_ONTIME_STATUS`, `RAW_JSON_DEBUG`, the bus settings
 (`TRAIN_SCREEN_SECONDS`, `BUS_SCREEN_SECONDS`, `BUS_REFRESH_SECONDS`,
-`MAX_BUS_ARRIVALS`, `RAW_BUS_DEBUG`). After a firmware change, refresh
+`MAX_BUS_ARRIVALS`, `RAW_BUS_DEBUG`) and the river settings
+(`RIVER_SCREEN_SECONDS`, `RIVER_REFRESH_SECONDS`, `MAX_RIVER_ARRIVALS`,
+`RIVER_MAX_ETA_MINUTES`, `RAW_RIVER_DEBUG`). After a firmware change, refresh
 the installer's bundled binary: copy `.pio/build/lilygo-t-display-s3/firmware.bin`
 into `installer/firmware/` and run `installer/build_exe.py`.
 
@@ -125,6 +143,7 @@ into `installer/firmware/` and run `installer/build_exe.py`.
 | config file + install.sh                | on-device NVS + USB installer (`config.cpp`) |
 | PIL dot-matrix TTF fonts                | dot-matrix clock via `docs/ttf_to_lgfx.py` (rows use FreeSans) |
 | (no bus support)                        | optional TfL bus screen (`bus_api.cpp`), cycled from `loop()` |
+| (no river support)                      | optional TfL river screen (`river_api.cpp`), same rotation |
 
 ## Project layout
 
@@ -136,12 +155,13 @@ ESP32Departures/
 │   ├── app_config.h          compile-time tunables
 │   ├── config.h              on-device (NVS) runtime config
 │   ├── dotmatrix_fonts.h     generated dot-matrix font (clock)
-│   ├── model.h / rail_api.h / bus_api.h / display.h
+│   ├── model.h / rail_api.h / bus_api.h / river_api.h / display.h
 ├── src/
 │   ├── main.cpp              WiFi, NTP, fetch task, render loop
 │   ├── config.cpp            NVS config + USB-serial provisioning
 │   ├── rail_api.cpp          National Rail LDBWS REST/JSON client
 │   ├── bus_api.cpp           TfL live bus arrivals (Countdown/URA) client
+│   ├── river_api.cpp         TfL live river sailings (Unified API) client
 │   └── display.cpp           LovyanGFX panel config + rendering
 ├── docs/                     mockup renderer + font-conversion script
 └── installer/                self-contained Windows installer (.exe)
@@ -168,3 +188,12 @@ ESP32Departures/
   on, and `RAW_BUS_DEBUG` in `app_config.h` prints raw lines to check it.
   Screen timings are `TRAIN_SCREEN_SECONDS` / `BUS_SCREEN_SECONDS`.
   Data provided by Transport for London.
+- **River boats** come from TfL's Unified API `river-bus` mode
+  (`https://api.tfl.gov.uk/StopPoint/{pier}/Arrivals`), which also needs no key.
+  Despite its name, the Countdown/URA feed the bus screen uses returns *only*
+  buses — piers are not in it — which is why this is a separate client. Note
+  the pier ID must be the **port** (`930GCAW`), not one of the berths
+  (`9300CAW1`): a berth sees only half its pier's sailings. `timeToStation` is
+  already relative, so the countdown is right even before NTP has synced.
+  RB2 (Tate to Tate) is not published on this feed. Screen timing is
+  `RIVER_SCREEN_SECONDS`. Data provided by Transport for London.

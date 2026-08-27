@@ -1,9 +1,10 @@
 """Esp32Departures installer — console wizard.
 
 Flashes the bundled firmware to a LilyGo T-Display-S3 and configures it (WiFi,
-National Rail LDBWS key, station, filters, an optional London bus stop, blank
-hours, brightness) over USB serial. One pre-built binary; all settings are
-written to the board at runtime, so no toolchain is needed on the user's PC.
+National Rail LDBWS key, station, filters, an optional London bus stop, an
+optional Thames pier, blank hours, brightness) over USB serial. One pre-built
+binary; all settings are written to the board at runtime, so no toolchain is
+needed on the user's PC.
 
 Packaged into a single Windows .exe with PyInstaller (see build_exe.py).
 
@@ -85,8 +86,8 @@ def validate_station(key, crs):
 def verify_config(cfg):
     """Re-prompt until the station (and key) are accepted online, or the check
     can't run (offline). Only warns in the offline case."""
-    if cfg.get("mode") == "bus":
-        print("  (buses only - no station or API key to check)")
+    if "train" not in parse_mode(cfg.get("mode")):
+        print("  (no trains configured - no station or API key to check)")
         return
     if cfg["key"] is None:
         # Keeping the board's existing key, which it never hands back, so there
@@ -295,7 +296,7 @@ def find_stops(search):
 def choose_bus_stop(current="", required=False):
     """Interactive stop finder. Returns the chosen 5-digit stop code, or ''."""
     while True:
-        print("\n  Where is your stop? Enter a postcode (e.g. 'KT3 6PF'), a place")
+        print("\n  Where is your stop? Enter a postcode (e.g. 'SW19 7NL'), a place")
         print("  name (e.g. 'Green Park Station'), or the 5-digit code on the stop.")
         # Blank keeps the stop already configured rather than silently dropping
         # it - only a board with no stop yet treats blank as "skip".
@@ -344,33 +345,28 @@ def choose_bus_stop(current="", required=False):
 def bus_wizard(defaults, required=False):
     """London bus section of the wizard. Returns (stop_code, line_filter).
 
-    `required` is set for a buses-only board, where declining would leave the
-    board with nothing at all to show, so a stop is asked for until given."""
+    Buses were already chosen in Part 2, so this asks *which* stop, never
+    whether to have one - asking twice is how a board ends up enabled for a
+    service it has no stop for. `required` is set when buses are the board's
+    only service, where leaving it blank would leave nothing at all to show;
+    otherwise a blank search drops the bus screen and the caller prunes it from
+    the service set."""
     current = defaults.get("bus", "")
 
+    print("\nYour bus stop")
     if required:
-        print("\nYour bus stop")
         print("  The board will show live arrivals for one London stop.")
     else:
-        print("\nLondon buses (optional)")
-        print("  The board can cycle to a live bus arrivals screen: trains for 30s,")
-        print("  then your bus stop for 15s, over and over. Uses TfL's open data -")
-        print("  no extra key needed. London only.")
-        default_yes = bool(current)
-        prompt = ("  Add a London bus stop? [Y/n]: " if default_yes
-                  else "  Add a London bus stop? [y/N]: ")
-        answer = input(prompt).strip().lower()
-        if not answer:
-            answer = "y" if default_yes else "n"
-        if not answer.startswith("y"):
-            return "", ""
+        print("  Live arrivals for one London stop, from TfL's open data - no")
+        print("  extra key needed. London only. Leave the search blank to drop")
+        print("  the bus screen after all.")
 
     while True:
         code = choose_bus_stop(current, required)
         if code or not required:
             break
         print("  ! A buses-only board needs a stop. Enter one, or re-run and"
-              " choose a mode that includes trains.")
+              " add another service.")
     if not code:
         return "", ""
 
@@ -386,6 +382,194 @@ def bus_wizard(defaults, required=False):
         else:
             print("  (nothing due at this stop right now - the stop is valid)")
     return code, line
+
+
+# --------------------------------------------------------------------------- #
+# River boats - TfL Unified API ("river-bus" mode)
+#
+# Uber Boat by Thames Clippers (RB1/RB4/RB6) and the Woolwich Ferry are ordinary
+# TfL services, so their piers and live sailings come from the open Unified API
+# with no key. A pier is identified by its Naptan ID; nobody knows those, so the
+# wizard lists the piers by name and the user just picks one.
+# --------------------------------------------------------------------------- #
+TFL_API = "https://api.tfl.gov.uk"
+RIVER_LINES = ["rb1", "rb4", "rb6", "woolwich-ferry"]
+
+# Fallback pier list, used only when TfL cannot be reached during setup, so the
+# wizard still works offline. Fetched live when possible, because piers do open
+# and close (Barking Riverside and Royal Wharf are both recent additions).
+RIVER_PIERS_FALLBACK = [
+    ("930GSWK", "Bankside Pier"), ("930GBRVS", "Barking Riverside Pier"),
+    ("930GBSP", "Battersea Power Station Pier"), ("930GBFR", "Blackfriars Pier"),
+    ("930GBSE", "Cadogan Pier"), ("930GCAW", "Canary Wharf Pier"),
+    ("930GCHP", "Chelsea Harbour Pier"), ("930GEMB", "Embankment Pier"),
+    ("930GGLP", "Greenland Surrey Quays Pier"), ("930GGNW", "Greenwich Pier"),
+    ("930GLBR", "London Bridge City Pier"), ("930GWMP", "London Eye Waterloo Pier"),
+    ("930GMHT", "Masthouse Terrace Pier"), ("930GMBK", "Millbank Pier"),
+    ("930GMIL", "North Greenwich Pier"), ("930GPUT", "Putney Pier"),
+    ("930GNEL", "Rotherhithe Pier"), ("930GWRF", "Royal Wharf Pier"),
+    ("930GPLW", "St Mary's Wandsworth Pier"), ("930GTMP", "Tower Pier"),
+    ("930GSGW", "Vauxhall St George Wharf Pier"),
+    ("930GWRQ", "Wandsworth Riverside Quarter Pier"), ("930GWMR", "Westminster Pier"),
+    ("930GWAS", "Woolwich Arsenal Pier"), ("930GWWC", "Woolwich Ferry North Pier"),
+    ("930GWWS", "Woolwich Ferry South Pier"),
+]
+
+
+def _tfl_json(path, timeout=15):
+    """GET a Unified API path and return the decoded JSON, or None."""
+    import urllib.request
+    req = urllib.request.Request(
+        TFL_API + path, headers={"User-Agent": "Esp32Departures-installer"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return None
+
+
+def _plain(text):
+    """Fold the typographic punctuation TfL uses in pier names down to ASCII.
+
+    "St Mary’s Wandsworth Pier" comes back with a U+2019 right single quote.
+    The board's font has no glyph for it, and the name is stored on the device
+    and drawn on screen, so it is normalised here rather than shipped through."""
+    for fancy, plain in (("‘", "'"), ("’", "'"), ("“", '"'),
+                         ("”", '"'), ("–", "-"), ("—", "-")):
+        text = text.replace(fancy, plain)
+    return text
+
+
+def river_piers():
+    """Every pier served by a TfL river-bus line, as [(naptan, name, [lines])].
+
+    Each line is asked separately and the results merged: a pier is on several
+    routes and TfL lists it once per route. Only the NaptanFerryPort entries are
+    kept - the 9300xxx IDs alongside them are individual berths, and a board
+    pointed at one berth would miss half the sailings from its own pier."""
+    piers = {}
+    for line in RIVER_LINES:
+        data = _tfl_json("/Line/%s/StopPoints" % line)
+        if not data:
+            continue
+        tag = "WF" if line == "woolwich-ferry" else line.upper()
+        for sp in data:
+            if sp.get("stopType") != "NaptanFerryPort":
+                continue
+            pid = sp.get("id")
+            if not pid:
+                continue
+            entry = piers.setdefault(
+                pid, {"name": _plain(sp.get("commonName", pid)), "lines": []})
+            if tag not in entry["lines"]:
+                entry["lines"].append(tag)
+    if not piers:
+        return [(pid, name, []) for pid, name in RIVER_PIERS_FALLBACK]
+    return sorted(((pid, v["name"], sorted(v["lines"])) for pid, v in piers.items()),
+                  key=lambda p: p[1])
+
+
+def river_arrivals(pier, line_filter=""):
+    """Live sailings at a pier. Returns (status, [(line, destination, mins), ...]).
+
+    Status is 'ok' | 'bad_pier' | 'net'. Mirrors bus_arrivals() so the wizard can
+    show the same "here is what your board will display" confirmation."""
+    import urllib.request
+    import urllib.error
+    req = urllib.request.Request(
+        "%s/StopPoint/%s/Arrivals" % (TFL_API, pier),
+        headers={"User-Agent": "Esp32Departures-installer"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:
+        return ("bad_pier" if e.code == 404 else "net"), []
+    except Exception:
+        return "net", []
+    out, seen = [], set()
+    for p in data if isinstance(data, list) else []:
+        line = str(p.get("lineName") or "")
+        if not line:
+            continue
+        if line_filter and line.lower() != line_filter.lower():
+            continue
+        vid = p.get("vehicleId")
+        if vid and vid in seen:      # the same sailing listed at both berths
+            continue
+        if vid:
+            seen.add(vid)
+        out.append((line, str(p.get("destinationName") or ""),
+                    max(0, int(p.get("timeToStation", 0)) // 60)))
+    out.sort(key=lambda x: x[2])
+    return "ok", out
+
+
+def choose_pier(current="", skippable=False):
+    """Interactive pier picker. Returns (naptan, name), or ('', '') if skipped."""
+    print("\n  Fetching the list of piers from TfL...")
+    piers = river_piers()
+    print("\n  Piers on the river bus network (%d):" % len(piers))
+    for i, (pid, name, lines) in enumerate(piers):
+        mark = "  <- current" if pid == current else ""
+        routes = "  (%s)" % ", ".join(lines) if lines else ""
+        print("    [%2d] %s%s%s" % (i, name, routes, mark))
+
+    if skippable:
+        print("    [ s] Skip - don't show a river screen after all")
+
+    default = ""
+    for i, (pid, _, _) in enumerate(piers):
+        if pid == current:
+            default = str(i)
+    while True:
+        d = " [%s]" % default if default else ""
+        sel = (input("  Choose a pier%s: " % d).strip() or default).lower()
+        if skippable and sel == "s":
+            return "", ""
+        if sel.isdigit() and int(sel) < len(piers):
+            pid, name, _ = piers[int(sel)]
+            return pid, name
+        print("  ! pick a number from the list"
+              + (", or 's' to skip" if skippable else ""))
+
+
+def river_wizard(defaults, required=False):
+    """River boat section of the wizard. Returns (pier, line_filter, pier_name).
+
+    Boats were already chosen in Part 2, so this asks *which* pier, never
+    whether to have one. `required` is set when boats are the board's only
+    service; otherwise the pick can be skipped and the caller prunes the river
+    screen from the service set."""
+    current = defaults.get("river", "")
+
+    print("\nYour pier")
+    if required:
+        print("  The board will show live sailings from one Thames pier.")
+    else:
+        print("  Live Uber Boat by Thames Clippers sailings (RB1/RB4/RB6) and the")
+        print("  Woolwich Ferry, from TfL's open data - no extra key needed.")
+        print("  Enter 's' at the pier list to drop the river screen after all.")
+
+    pier, name = choose_pier(current, skippable=not required)
+    if not pier:
+        return "", "", ""
+
+    line = ask("  Show only one route? (e.g. RB1; blank = all routes)",
+               defaults.get("riverline", "")).upper()
+    status, sailings = river_arrivals(pier, line)
+    if status == "bad_pier":
+        print("  ! TfL doesn't recognise pier '%s'." % pier)
+    elif status == "ok":
+        if sailings:
+            print("  Next boats from %s right now:" % name)
+            for route, dest, mins in sailings[:3]:
+                when = "Due" if mins < 1 else "%d min" % mins
+                print("    %4s  %-32s %s" % (route, dest, when))
+        else:
+            print("  (nothing due at this pier right now - the pier is valid)")
+    else:
+        print("  (couldn't check sailings online - accepting the pier as chosen)")
+    return pier, line, name
 
 
 # --------------------------------------------------------------------------- #
@@ -493,7 +677,8 @@ def provision(port, cfg, wait_boot=20.0):
             return False
 
         for key in ("ssid", "pass", "key", "dep", "dest", "plat", "tz",
-                    "bus", "busline", "mode", "bstart", "bend", "bright", "refr"):
+                    "bus", "busline", "river", "riverline", "rivername",
+                    "mode", "bstart", "bend", "bright", "refr"):
             # None means "leave whatever the board already has". The firmware
             # stages a COMMIT on top of its current config, so simply not
             # sending a key preserves it.
@@ -550,35 +735,123 @@ def ask(prompt, default="", required=False, cast=str, lo=None, hi=None):
         return val
 
 
-def ask_mode(current="both"):
-    """Which services the board should show. Returns "both" | "train" | "bus"."""
-    labels = {"both": "Trains and buses", "train": "Trains only", "bus": "Buses only"}
-    order = ["both", "train", "bus"]
-    default = current if current in order else "both"
+SERVICES = [
+    ("train", "Trains", "UK-wide, National Rail"),
+    ("bus", "London buses", "TfL, London only"),
+    ("river", "River boats", "Uber Boat by Thames Clippers + Woolwich Ferry"),
+]
+
+
+def parse_mode(raw):
+    """Normalise a stored mode into a list of service names.
+
+    Boards flashed before the river screen stored a single exclusive word, and
+    those settings survive a firmware update untouched, so "" and "both" are
+    still read here as the trains-and-buses board they meant."""
+    raw = (raw or "").strip()
+    if not raw or raw == "both":
+        return ["train", "bus"]
+    names = [n for n, _, _ in SERVICES]
+    return [t for t in (x.strip() for x in raw.split(",")) if t in names]
+
+
+def ask_mode(current="train,bus"):
+    """Which services the board should show. Returns a comma-separated set,
+    e.g. "train,bus,river" - the board cycles through everything enabled."""
+    chosen = parse_mode(current) or ["train", "bus"]
     print("\nWhat should the board show?")
-    for i, m in enumerate(order, 1):
-        mark = "  (current)" if m == default else ""
-        print(f"  [{i}] {labels[m]}{mark}")
-    print("      Trains are UK-wide (National Rail); buses are London-only (TfL).")
+    print("  It cycles through everything you turn on, one screen at a time.")
+    for i, (name, label, note) in enumerate(SERVICES, 1):
+        mark = "  (currently on)" if name in chosen else ""
+        print(f"  [{i}] {label:<14} - {note}{mark}")
+    default = ",".join(str(i) for i, (n, _, _) in enumerate(SERVICES, 1) if n in chosen)
     while True:
-        raw = input(f"Choose [{order.index(default) + 1}]: ").strip()
+        raw = input(f"Choose one or more, comma-separated [{default}]: ").strip()
         if not raw:
-            return default
-        if raw.isdigit() and 1 <= int(raw) <= len(order):
-            return order[int(raw) - 1]
-        if raw.lower() in order:
-            return raw.lower()
-        print("  ! choose 1, 2 or 3")
+            raw = default
+        picks = []
+        for tok in (t.strip().lower() for t in raw.split(",")):
+            if not tok:
+                continue
+            if tok.isdigit() and 1 <= int(tok) <= len(SERVICES):
+                picks.append(SERVICES[int(tok) - 1][0])
+            elif tok in [n for n, _, _ in SERVICES]:
+                picks.append(tok)
+            else:
+                picks = None
+                break
+        if not picks:
+            print(f"  ! choose numbers from 1 to {len(SERVICES)}, e.g. 1,3")
+            continue
+        # Preserve the listed order rather than the typed order, so the screen
+        # rotation the firmware runs matches the order shown here.
+        return ",".join(n for n, _, _ in SERVICES if n in picks)
+
+
+# A board that has never been configured blanks itself overnight rather than
+# burning the panel all night. Stored as the firmware's bstart/bend (the hour it
+# goes OFF and the hour it comes back ON), but asked the other way round.
+DEFAULT_ON_HOUR = 6
+DEFAULT_OFF_HOUR = 22
+
+
+def ask_screen_hours(d, on_board):
+    """Screen on/off hours. Returns (bstart, bend) in the firmware's terms:
+    `bstart` is the hour the screen goes OFF, `bend` the hour it comes back ON.
+
+    Asked ON-first because that is how people describe it ("on from 6, off at
+    10"), rather than in the firmware's blank-window terms. An already-configured
+    board keeps its own hours; a fresh one starts at 06:00-22:00."""
+    if on_board:
+        def_on = d.get("bend", DEFAULT_ON_HOUR)
+        def_off = d.get("bstart", DEFAULT_OFF_HOUR)
+        if str(def_on) == "-1" or str(def_off) == "-1":
+            def_on, def_off = -1, -1
+    else:
+        def_on, def_off = DEFAULT_ON_HOUR, DEFAULT_OFF_HOUR
+
+    print("\nThe screen turns itself off overnight, so it isn't lighting an empty")
+    print("room (and the panel isn't burning in). Enter -1 for both to leave it on")
+    print("all the time.")
+    while True:
+        on_h = ask("  Screen comes ON at hour (24h)", def_on, cast=int, lo=-1, hi=23)
+        off_h = ask("  Screen goes OFF at hour (24h)", def_off, cast=int, lo=-1, hi=23)
+        if on_h == -1 or off_h == -1:
+            print("  -> Screen stays on all the time.")
+            return -1, -1
+        if on_h == off_h:
+            print("  ! ON and OFF can't be the same hour.")
+            continue
+        lit = (off_h - on_h) % 24
+        print(f"  -> Screen ON {on_h:02d}:00-{off_h:02d}:00 ({lit}h), "
+              f"OFF the other {24 - lit}h.")
+        # ON/OFF the wrong way round is easy to do and leaves the board dark for
+        # most of the day, which reads as a broken screen rather than a setting.
+        # The threshold is half the day, not a few hours: entering 22 then 6
+        # (the classic reversal) still leaves an 8-hour window that looks
+        # deliberate on its own but almost never is.
+        if lit < 12 and input("  That's on for less than half the day - is that"
+                              " right? [y/N]: ").strip().lower() not in ("y", "yes"):
+            continue
+        return off_h, on_h
 
 
 def wizard(defaults=None, on_board=False):
-    """Ask for every setting. `defaults` pre-fills from the board's current
-    config; `on_board` means the board is already configured, so the two secrets
-    it will not hand back (WiFi password, API key) can be left alone instead of
-    retyped - a blank answer stores None, which provision() skips."""
+    """Ask for every setting, in two parts: the board basics everyone needs,
+    then the services it should show.
+
+    `defaults` pre-fills from the board's current config; `on_board` means the
+    board is already configured, so the two secrets it will not hand back (WiFi
+    password, API key) can be left alone instead of retyped - a blank answer
+    stores None, which provision() skips."""
     d = defaults or {}
-    print("\nEnter your settings (press Enter to accept a [default]):\n")
     cfg = {}
+
+    print("\n" + "-" * 44)
+    print(" Part 1 of 2  -  board basics")
+    print("-" * 44)
+    print("\nPress Enter to accept a [default].\n")
+
     cfg["ssid"] = ask("WiFi network (2.4GHz)", d.get("ssid", ""), required=True)
 
     keep = "  (Enter = keep the one already on the board)" if on_board else ""
@@ -589,47 +862,55 @@ def wizard(defaults=None, on_board=False):
         pw = ask(f"WiFi password{keep}", "")
     cfg["pass"] = pw if pw else (None if on_board else "")
 
-    cfg["mode"] = ask_mode(d.get("mode", "both"))
+    cfg["bstart"], cfg["bend"] = ask_screen_hours(d, on_board)
 
-    # Train settings are only asked for when trains are actually wanted. A
-    # bus-only board needs no API key and no station at all.
-    if cfg["mode"] == "bus":
+    print("")
+    cfg["refr"] = ask("Refresh seconds", d.get("refr", 60), cast=int, lo=15, hi=3600)
+    cfg["bright"] = ask("Brightness (0-255)", d.get("bright", 180), cast=int, lo=0, hi=255)
+    cfg["tz"] = ask("Timezone (POSIX TZ; blank = UK default)", d.get("tz", detect_tz()))
+
+    print("\n" + "-" * 44)
+    print(" Part 2 of 2  -  what the board shows")
+    print("-" * 44)
+
+    cfg["mode"] = ask_mode(d.get("mode", "train,bus"))
+    services = parse_mode(cfg["mode"])
+
+    # Each service is only asked about when it is actually wanted, and a service
+    # switched off keeps whatever it already had on the board (None = don't send)
+    # so switching it back on later costs no retyping. A boats-only board needs
+    # no API key and no station at all.
+    if "train" not in services:
         cfg["key"] = cfg["dep"] = cfg["dest"] = cfg["plat"] = None
     else:
-        api = ask(f"LDBWS API key (raildata.org.uk){keep}", "", required=not on_board)
+        print("\nTrains")
+        api = ask(f"  LDBWS API key (raildata.org.uk){keep}", "", required=not on_board)
         cfg["key"] = api if api else (None if on_board else "")
-        cfg["dep"] = ask("Departure station CRS", d.get("dep", ""), required=True).upper()
-        cfg["dest"] = ask("Destination CRS filter (optional)", d.get("dest", "")).upper()
-        cfg["plat"] = ask("Platform filter (optional)", d.get("plat", ""))
+        cfg["dep"] = ask("  Departure station CRS", d.get("dep", ""), required=True).upper()
+        cfg["dest"] = ask("  Destination CRS filter (optional)", d.get("dest", "")).upper()
+        cfg["plat"] = ask("  Platform filter (optional)", d.get("plat", ""))
 
-    if cfg["mode"] == "train":
+    if "bus" not in services:
         # Leave the stored stop alone so switching buses back on keeps it.
         cfg["bus"] = cfg["busline"] = None
     else:
-        cfg["bus"], cfg["busline"] = bus_wizard(d, required=(cfg["mode"] == "bus"))
-    print("\nScreen blank hours turn the display OFF between two times (e.g. START 23,")
-    print("END 7 blanks it overnight). Enter -1 for both to leave it on all the time.")
-    while True:
-        cfg["bstart"] = ask("Screen blank START hour - screen goes OFF (-1 = never blank)",
-                            d.get("bstart", -1), cast=int, lo=-1, hi=23)
-        cfg["bend"] = ask("Screen blank END hour - screen comes back ON (-1 = never blank)",
-                          d.get("bend", -1), cast=int, lo=-1, hi=23)
-        if cfg["bstart"] == -1 or cfg["bend"] == -1:
-            cfg["bstart"] = cfg["bend"] = -1
-            print("  Screen stays on all the time.")
-            break
-        off = (cfg["bend"] - cfg["bstart"]) % 24
-        print(f"  -> Screen OFF {cfg['bstart']:02d}:00-{cfg['bend']:02d}:00 "
-              f"({off}h), ON the other {24 - off}h.")
-        # START/END the wrong way round is easy to do and blanks the board for
-        # most of the day, which reads as a broken screen rather than a setting.
-        if off > 12 and input("  That's off for most of the day - is that right? [y/N]: "
-                              ).strip().lower() not in ("y", "yes"):
-            continue
-        break
-    cfg["bright"] = ask("Brightness (0-255)", d.get("bright", 180), cast=int, lo=0, hi=255)
-    cfg["refr"] = ask("Refresh seconds", d.get("refr", 60), cast=int, lo=15, hi=3600)
-    cfg["tz"] = ask("Timezone (POSIX TZ; blank = UK default)", d.get("tz", detect_tz()))
+        cfg["bus"], cfg["busline"] = bus_wizard(d, required=(services == ["bus"]))
+
+    if "river" not in services:
+        cfg["river"] = cfg["riverline"] = cfg["rivername"] = None
+    else:
+        cfg["river"], cfg["riverline"], cfg["rivername"] = river_wizard(
+            d, required=(services == ["river"]))
+
+    # A service chosen in Part 2 but then left without a stop or pier would put
+    # a screen in the rotation with nothing behind it, so drop it from the set
+    # rather than storing a mode the board cannot honour.
+    for name, key in (("bus", "bus"), ("river", "river")):
+        if name in services and cfg.get(key) == "":
+            services.remove(name)
+            print(f"  ({name} screen left off - nothing was selected)")
+    cfg["mode"] = ",".join(services)
+
     return cfg
 
 
@@ -641,21 +922,27 @@ def summary(cfg):
     else:
         masked_key = "(set)"
     pw = "(password unchanged)" if cfg["pass"] is None else "(password set)"
-    mode = cfg.get("mode") or "both"
-    shows = {"both": "Trains and buses", "train": "Trains only", "bus": "Buses only"}
+    services = parse_mode(cfg.get("mode"))
+    labels = {n: l for n, l, _ in SERVICES}
     print("\n  Summary")
-    print(f"    Shows       {shows.get(mode, mode)}")
+    print(f"    Shows       {', '.join(labels[n] for n in services) or 'nothing'}")
     print(f"    WiFi        {cfg['ssid']}  {pw}")
-    if mode != "bus":
+    if "train" in services:
         print(f"    API key     {masked_key}")
         print(f"    Station     {cfg['dep']}" + (f" -> {cfg['dest']}" if cfg["dest"] else ""))
         if cfg["plat"]:
             print(f"    Platform    {cfg['plat']}")
-    if mode != "train" and cfg.get("bus"):
+    if "bus" in services and cfg.get("bus"):
         route = f" (route {cfg['busline']} only)" if cfg.get("busline") else ""
         print(f"    Bus stop    {cfg['bus']}{route}")
-    if cfg["bstart"] != -1 or cfg["bend"] != -1:
-        print(f"    Blank hours {cfg['bstart']}:00 - {cfg['bend']}:00")
+    if "river" in services and cfg.get("river"):
+        route = f" (route {cfg['riverline']} only)" if cfg.get("riverline") else ""
+        pier = cfg.get("rivername") or cfg["river"]
+        print(f"    Pier        {pier}{route}")
+    if cfg["bstart"] != -1 and cfg["bend"] != -1:
+        print(f"    Screen on   {cfg['bend']:02d}:00 - {cfg['bstart']:02d}:00")
+    else:
+        print("    Screen on   always")
     if cfg.get("tz"):
         print(f"    Timezone    {cfg['tz']}")
     print(f"    Brightness  {cfg['bright']}   Refresh {cfg['refr']}s\n")
@@ -698,12 +985,14 @@ def run_interactive():
     if has_fw:
         current = read_config(port)
         if current.get("prov") == "1":
-            mode = current.get("mode") or "both"
+            services = parse_mode(current.get("mode"))
             shows = []
-            if mode != "bus" and current.get("dep"):
+            if "train" in services and current.get("dep"):
                 shows.append(f"station {current['dep']}")
-            if mode != "train" and current.get("bus"):
+            if "bus" in services and current.get("bus"):
                 shows.append(f"bus stop {current['bus']}")
+            if "river" in services and current.get("river"):
+                shows.append(current.get("rivername") or f"pier {current['river']}")
             print(f"\nBoard is showing {' and '.join(shows) or 'nothing yet'} "
                   f"on WiFi '{current.get('ssid', '?')}'.")
         choice = input("\nBoard already has Esp32Departures firmware.\n"
@@ -769,7 +1058,8 @@ def run_auto(path):
     # matching the interactive wizard. Pass an explicit "" to clear a setting.
     cfg = {k: d.get(k) for k in
            ("ssid", "pass", "key", "dep", "dest", "plat", "tz",
-            "bus", "busline", "mode", "bstart", "bend", "bright", "refr")}
+            "bus", "busline", "river", "riverline", "rivername",
+            "mode", "bstart", "bend", "bright", "refr")}
     if cfg["tz"] == "":
         cfg["tz"] = detect_tz()
     port = d.get("port") or pick_port()

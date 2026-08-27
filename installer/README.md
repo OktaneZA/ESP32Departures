@@ -2,8 +2,9 @@
 
 A self-contained **Windows 10/11** installer for the LilyGo T-Display-S3 departure
 board. It flashes the firmware and configures it (WiFi, National Rail LDBWS key,
-station, filters, an optional London bus stop, blank hours, brightness) over USB
-— **no Python, PlatformIO, or toolchain needed** on the target PC.
+station, filters, an optional London bus stop, an optional Thames pier, blank
+hours, brightness) over USB — **no Python, PlatformIO, or toolchain needed** on
+the target PC.
 
 *Part of Esp32Departures, derived from
 [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display).*
@@ -77,20 +78,31 @@ choices:
 **You never have to retype your WiFi password or API key.** They are the only two
 things the board will not read back, so their prompts accept a blank answer
 meaning *keep the one already on the board*. Everything else — station, bus stop,
-blank hours, brightness — is pre-filled with what the board is currently using,
-so pressing Enter through the whole wizard changes nothing.
+pier, blank hours, brightness — is pre-filled with what the board is currently
+using, so pressing Enter through the whole wizard changes nothing.
 
 ### What you'll be asked
+
+The wizard runs in two parts: the settings every board needs, then what it
+should actually show.
+
+**Part 1 — board basics**
 - WiFi network + password (2.4 GHz only — the ESP32-S3 has no 5 GHz radio)
-- **What the board should show** — trains and buses, trains only, or buses only.
-  You are then asked only for what that mode needs
+- **Screen on/off hours** — the display turns itself off overnight so it isn't
+  lighting an empty room. A new board defaults to **on at 06:00, off at 22:00**;
+  enter `-1` for both to keep it on all the time. A board you've already
+  configured keeps its own hours as the default
+- Refresh interval, then brightness
+- Timezone — **auto-detected from your PC's locale** (just press Enter to accept)
+
+**Part 2 — what the board shows**
+- **Which services** — trains, London buses, river boats, or any combination.
+  You pick them from a list (`1,3` for trains and boats), and are then asked
+  only for what those need
 - *(trains)* LDBWS API key (your consumer key from [raildata.org.uk](https://raildata.org.uk))
 - *(trains)* Departure station CRS (e.g. `MOT`), optional destination + platform filters
 - *(buses)* Your London bus stop (see below)
-- Screen-blank hours (the display turns off between them — e.g. 23 to 7 for
-  overnight; enter `-1` for both to keep it on all the time), brightness,
-  refresh interval
-- Timezone — **auto-detected from your PC's locale** (just press Enter to accept)
+- *(boats)* Your Thames pier (see below)
 
 > **Finding your station's CRS code:** it's the 3-letter code for your station
 > (e.g. `PAD` = London Paddington, `MOT` = Motspur Park). Look it up here:
@@ -114,11 +126,11 @@ A **buses-only** board needs no API key and no station, so the wizard skips
 those prompts entirely — but it does require a stop, since otherwise there
 would be nothing to display.
 
-The installer asks *"Add a London bus stop?"* and, if you say yes, one prompt
-finds the stop for you — you don't need to know any codes. Type whichever you
-have and it works out which is which:
+Because you already chose buses in Part 2, the installer doesn't ask *whether*
+you want a stop — just which one. A single prompt finds it for you, so you don't
+need to know any codes. Type whichever you have and it works out which is which:
 
-- a **postcode** — `KT3 6PF`
+- a **postcode** — `SW19 7NL`
 - a **place or stop name** — `Green Park Station`
 - the **5-digit code** printed on the stop itself — `52053`
 
@@ -126,14 +138,24 @@ You then get a numbered list of nearby stops **with the direction each one
 serves**, so you can pick the right side of the road:
 
 ```
-  Where is your stop? Enter a postcode (e.g. 'KT3 6PF'), a place
+  Where is your stop? Enter a postcode (e.g. 'SW19 7NL'), a place
   name (e.g. 'Green Park Station'), or the 5-digit code on the stop.
-  Postcode / place / code (blank to skip): KT3 6PF
+  Postcode / place / code (blank to skip): SW19 7NL
 
-  Bus stops near KT3 6PF:
-    [0] Hail & Ride Motspur Park / W Barnes Lane  -  63m  -  (hail & ride)
-    [1] Motspur Park Station (B)  -  308m  -  towards New Malden
-    [2] Motspur Park Station (A)  -  367m  -  towards Raynes Park
+  Bus stops near SW19 7NL:
+    [0] Alexandra Road / Wimbledon Stn (B)  -  56m  -  towards Wimbledon Village
+    [1] Wimbledon Station (P)  -  61m  -  towards Southfields
+    [2] Alexandra Road / Wimbledon Stn (A)  -  77m  -  towards Southfields Or Tooting
+    [3] Wimbledon Station (L)  -  117m  -  towards Putney Heath Or Raynes Park
+    [4] Wimbledon Station (D)  -  117m  -  towards Colliers Wood, Morden Or Wimbledon Chase
+    [5] Wimbledon Police Station (J)  -  164m  -  towards Colliers Wood
+    [6] Francis Grove (M)  -  185m  -  towards Raynes Park
+    [7] Wimbledon Hill Road (S)  -  198m  -  towards South Wimbledon, Colliers Wood Or Tooting
+    [8] Wimbledon Police Station (K)  -  204m  -  towards Wimbledon Village
+    [9] Francis Grove (N)  -  213m  -  towards Colliers Wood, Southfields Or Wimbledon Chase
+    [10] Francis Grove  -  226m  -  (hail & ride)
+    [11] Wimbledon Hill Road (R)  -  226m  -  towards Southfields, Putney Heath Or Raynes Park
+    ... 11 more not shown - search a more specific place to narrow it down
     [s] Search somewhere else
   Choose a stop [0]:
 ```
@@ -150,6 +172,54 @@ search keeps the stop you already have.)
 > Buses outside London aren't covered — the feed is TfL's. Bus data provided by
 > Transport for London.
 
+## Adding a river boat pier (optional)
+
+The board can show live **Uber Boat by Thames Clippers** sailings (RB1, RB4, RB6)
+and the **Woolwich Ferry**, for one pier. It uses TfL's open data, so — as with
+the buses — there is **no extra API key to get**. These are real live
+predictions, not a printed timetable: a boat running late shows as running late.
+
+A **boats-only** board needs no API key and no station, so the wizard skips those
+prompts entirely.
+
+As with the buses, choosing river boats in Part 2 is the opt-in — the installer
+doesn't ask again. It lists every pier on the network by name with the routes it
+serves, and you pick a number. There are no codes to look up:
+
+```
+  Your pier
+    Live Uber Boat by Thames Clippers sailings (RB1/RB4/RB6) and the
+    Woolwich Ferry, from TfL's open data - no extra key needed.
+    Enter 's' at the pier list to drop the river screen after all.
+
+  Fetching the list of piers from TfL...
+
+  Piers on the river bus network (26):
+    [ 0] Bankside Pier  (RB1, RB6)
+    [ 1] Barking Riverside Pier  (RB1, RB6)
+    [ 2] Battersea Power Station Pier  (RB1, RB6)
+    ...
+    [ 5] Canary Wharf Pier  (RB1, RB4, RB6)
+    ...
+  Choose a pier: 5
+  Show only one route? (e.g. RB1; blank = all routes):
+
+  Next boats from Canary Wharf Pier right now:
+     RB1  Barking Riverside Pier             Due
+     RB1  Westminster Pier                   10 min
+     RB6  Putney Pier                        18 min
+```
+
+As with the buses you can **limit the screen to a single route** (e.g. just
+`RB1`), and the installer prints the next few sailings so you can confirm you
+picked the right pier before it writes anything to the board.
+
+To turn the river screen off later, re-run the installer, choose **Change
+settings**, and leave river boats out of the service list.
+
+> **RB2 (Tate to Tate) isn't available** — TfL doesn't publish it on this feed.
+> Boat data provided by Transport for London.
+
 ## How it works
 
 One pre-built firmware binary is flashed to every board. Settings are **not**
@@ -158,6 +228,9 @@ USB-serial protocol (`PING`/`CFG`/`COMMIT`), so no recompilation is ever require
 `GET` reads the current settings back (which is how the wizard pre-fills itself)
 and `SCAN` lists the WiFi networks the board can see. Serial is opened with
 `dtr=True, rts=False` to avoid resetting the S3.
+
+Turning a service off **omits** its settings rather than clearing them, so a bus
+stop or pier you stop showing is still there when you switch it back on later.
 
 ## Troubleshooting
 
@@ -176,10 +249,14 @@ bend=22
 ```
 
 That means *off* at 06:00 and *back on* at 22:00 — blank for 16 hours a day. You
-probably wanted `bstart=22`, `bend=6`. Re-run the installer, choose **Change
-settings**, and enter them as OFF-hour then ON-hour (or `-1` for both to disable
-blanking). The installer now prints the off-window back to you and queries
-anything longer than half a day.
+probably wanted `bstart=22`, `bend=6`, which is what a board configured with a
+current installer gets by default.
+
+The wizard now asks these the natural way round — **"Screen comes ON at"** then
+**"Screen goes OFF at"** — so `6` then `22` gives you the right thing. It prints
+the resulting ON window back to you and queries anything under half a day.
+Re-run the installer and choose **Change settings** to fix a board that was set
+up the old way (or enter `-1` for both to disable blanking entirely).
 
 A board with no clock yet (no WiFi) can also blank unpredictably, because it does
 not know the time — fix the WiFi first.
@@ -253,8 +330,10 @@ python installer.py --auto cfg.json
 ```
 
 where `cfg.json` has `port`, `flash`, and any of the settings keys
-(`ssid pass key dep dest plat tz bus busline mode bstart bend bright refr`).
-`mode` is `both`, `train`, or `bus`.
+(`ssid pass key dep dest plat tz bus busline river riverline rivername mode
+bstart bend bright refr`). `mode` is a comma-separated set — `train`, `bus`,
+`river`, or any combination such as `train,bus,river`. The older exclusive
+values (`both`, or a lone `train`/`bus`) are still accepted.
 
 A key you **leave out** keeps whatever the board already has; pass an explicit
 `""` to clear one. So a partial update is just:

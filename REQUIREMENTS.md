@@ -8,9 +8,11 @@ directly from the National Rail Live Departure Board (LDBWS) JSON API and render
 them on the board's built-in 170×320 colour LCD — no host computer, server, or
 cloud service.
 
-It can also show **live London bus arrivals** for one bus stop, taken from TfL's
-open Countdown feed. Either service is optional: the board can be set to show
-trains, buses, or both, cycling between the two boards when both are on.
+It can also show **live London bus arrivals** for one bus stop, from TfL's open
+Countdown feed, and **live river boat sailings** for one Thames pier — Uber Boat
+by Thames Clippers and the Woolwich Ferry — from TfL's Unified API. Every
+service is optional and independent: the board shows any combination and cycles
+through whichever are enabled.
 
 This document is a **retrospective** specification: it records the requirements
 the delivered firmware and installer actually satisfy.
@@ -96,7 +98,7 @@ and the LDBWS endpoint (verifying the station and API key).
 
 | Component | Purpose |
 |---|---|
-| `render_mockup.py` (Pillow) | Pixel-accurate renders of both boards, mirroring `display.cpp` |
+| `render_mockup.py` (Pillow) | Pixel-accurate renders of the train and bus boards, mirroring `display.cpp` |
 | `ttf_to_lgfx.py` | Converts the dot-matrix TTFs to an `lgfx::GFXfont` header |
 
 ---
@@ -238,6 +240,72 @@ itself never calls them:
 
 ---
 
+## 3b. Data Source — TfL River Bus (Unified API, optional)
+
+Used only when the user configures a pier. Uber Boat by Thames Clippers
+(RB1/RB4/RB6) and the Woolwich Ferry are operated as TfL `river-bus` services,
+so their live predictions come from the ordinary
+[TfL Unified API](https://api.tfl.gov.uk/), not from the Countdown feed the bus
+screen uses.
+
+> **Why a second TfL client.** The Countdown feed is titled "Live Bus **& River
+> Bus** Arrivals", but in practice it returns only buses: a `Circle=` query
+> centred on Canary Wharf Pier returns bus stops exclusively, and
+> `StopPointName=Canary Wharf Pier` returns HTTP 416. Piers are reachable only
+> through the Unified API, which is ordinary JSON rather than the URA
+> line-per-record format — hence a separate parser.
+
+| Item | Detail |
+|---|---|
+| **API** | TfL Unified API, `river-bus` mode |
+| **Endpoint** | `https://api.tfl.gov.uk/StopPoint/{naptan}/Arrivals` |
+| **Protocol** | HTTPS. Standard JSON: an array of `Tfl.Api.Presentation.Entities.Prediction` objects |
+| **Authentication** | **None**. An `app_key` is optional and only raises the rate limit (50 req/min unregistered, 500 req/min registered) |
+| **Data returned** | `lineName`, `destinationName`, `stationName`, `timeToStation` (**seconds from now**), `vehicleId`, `platformName` (inbound/outbound) |
+| **Coverage** | RB1, RB4, RB6 and the Woolwich Ferry. **RB2 (Tate to Tate) is not published on this feed** |
+| **Freshness** | Genuinely live, not a timetable dump: sampling the whole mode twice 100 s apart and matching on `vehicleId`+`naptanId`, sailings already under way shifted their `expectedArrival` by −66 s and −39 s. Sailings not yet departed sit on scheduled whole-minute times until they move |
+| **Prediction horizon** | Open-ended; the firmware caps it at `RIVER_MAX_ETA_MINUTES` |
+| **Attribution** | "Data provided by Transport for London" |
+
+### 3b.1 Pier identifiers
+
+A pier has two kinds of Naptan ID and the distinction matters:
+
+| Form | Example | Meaning |
+|---|---|---|
+| `930G…` | `930GCAW` | `NaptanFerryPort` — the **pier**, aggregating both directions |
+| `9300…` | `9300CAW1` | `NaptanFerryBerth` — one **berth**, roughly one direction |
+
+The board must be pointed at the port. A berth sees only the sailings that use
+it, so a board configured with one would silently miss half its pier's boats.
+
+There are 26 piers across the four lines. The installer fetches them live from
+`/Line/{id}/StopPoints` and keeps a baked-in fallback list for offline setup.
+
+### 3b.2 Requirements
+
+| ID | Requirement |
+|---|---|
+| RIV-01 | HTTPS enforced for the TfL endpoint; no HTTP fallback |
+| RIV-02 | Only `NaptanFerryPort` (`930G…`) IDs are offered by the installer and accepted as a pier; berths are never presented |
+| RIV-03 | `timeToStation` is used directly as the countdown. It is already relative to the moment TfL answered, so the river screen is correct even before NTP has synced |
+| RIV-04 | Response parsed with an ArduinoJson **filter**, so only the five rendered fields are ever allocated out of a ~6 KB document |
+| RIV-05 | The body is read into a bounded buffer capped at `RIVER_MAX_RESPONSE`; a larger response is discarded rather than allowed to exhaust the heap |
+| RIV-06 | The body is bulk-read from the socket rather than parsed byte-by-byte off the stream, because each `read()` is an lwip call and per-byte parsing of a 6 KB document is far slower |
+| RIV-07 | HTTP/1.0 is requested so the server returns an unchunked body (TfL sends no `Content-Length`, so size can only be bounded while reading) |
+| RIV-08 | Predictions arrive unordered and are sorted soonest-first before display |
+| RIV-09 | Sailings further ahead than `RIVER_MAX_ETA_MINUTES` are discarded. The window is 120 minutes, not the buses' 30: RB6 headways reach 40 minutes, so a bus-sized window would leave the screen empty most of the day |
+| RIV-10 | Duplicate predictions for one sailing (the same `vehicleId` listed at both of a pier's berths) are collapsed, so a duplicate cannot cost a real departure one of the three rows |
+| RIV-11 | An unknown pier (HTTP 404) is a configuration error: logged once, retried only every 5 minutes, and the river screen withheld entirely |
+| RIV-12 | Zero sailings is a valid result ("No boats due"), not a fetch failure. Verified live: Rotherhithe and Woolwich Ferry North both return `200 []` off-peak |
+| RIV-13 | TfL names a pier only *inside* a prediction, so a pier with nothing due would identify itself only by its raw Naptan. The installer stores the friendly name it already showed the user (`rivername`), which the firmware falls back to |
+| RIV-14 | The pier ID is percent-encoded into the request path |
+| RIV-15 | A route filter (`riverline`) is matched case-insensitively, so `rb1` matches TfL's `RB1` |
+| RIV-16 | `RAW_RIVER_DEBUG` build flag dumps parsed sailings for field verification |
+| RIV-17 | Polling is no more frequent than `RIVER_REFRESH_SECONDS` (60 s) |
+
+---
+
 ## 4. Configuration (on-device)
 
 Settings are stored in NVS (namespace `esp32dep`) and set by the installer over
@@ -253,24 +321,28 @@ generic and shareable.
 | `dest` | No | — | Destination filter CRS (empty = all) |
 | `plat` | No | — | Platform filter (empty = all) |
 | `tz` | No | UK | POSIX timezone string; the installer sets it from the PC's locale |
-| `mode` | No | `both` | Which services to show: `both`, `train`, or `bus` |
+| `mode` | No | `train,bus` | Comma-separated set of services to show, e.g. `train,bus,river` |
 | `bus` | No | - | TfL bus stop SMS code (empty = no bus screen at all) |
 | `busline` | No | - | Bus route filter, e.g. `38` (empty = every route at the stop) |
-| `bstart` | No | `-1` | Screen-blank start hour (−1 = off) |
-| `bend` | No | `-1` | Screen-blank end hour (−1 = off) |
+| `river` | No | - | TfL pier Naptan **port** ID, e.g. `930GCAW` (empty = no river screen at all) |
+| `riverline` | No | - | River route filter, e.g. `RB1` (empty = every route at the pier) |
+| `rivername` | No | - | Friendly pier name, stored by the installer so a pier with nothing due still shows a name |
+| `bstart` | No | `-1` | Screen-blank start hour — when the screen goes OFF (−1 = never blank). The installer offers `22` on a new board |
+| `bend` | No | `-1` | Screen-blank end hour — when the screen comes back ON (−1 = never blank). The installer offers `6` on a new board |
 | `bright` | No | `180` | Backlight brightness (0–255) |
 | `refr` | No | `60` | API poll interval (seconds) |
 
 | ID | Requirement |
 |---|---|
 | CFG-01 | Config persisted in NVS; survives power cycles and firmware re-flash of the same layout |
-| CFG-02 | Device is "provisioned" only when `ssid`, `key`, and `dep` are all set |
+| CFG-02 | Device is "provisioned" when `ssid` is set and at least one service is live (see CFG-07) |
 | CFG-03 | Until provisioned, an "Awaiting setup" screen is shown and normal operation is suspended |
 | CFG-04 | Reconfiguration is possible at any time over serial without re-flashing |
-| CFG-05 | The bus screen is opt-in: with `bus` empty the firmware never contacts TfL and behaves exactly as the train-only board |
-| CFG-06 | `mode` selects trains, buses, or both. It expresses **intent only** — a service is live when its mode allows it *and* its settings are present, so switching trains off keeps the API key and station stored for switching back |
-| CFG-07 | A board is provisioned once it has WiFi and **at least one** live service. A buses-only board needs no API key and no station at all |
-| CFG-08 | `mode` absent (a config written before it existed) means `both`, so existing boards are unaffected |
+| CFG-05 | Each TfL screen is opt-in: with `bus` (or `river`) empty the firmware never contacts that feed and behaves exactly as a board without it |
+| CFG-06 | `mode` is a **set**, so any combination of services can be on at once. It expresses **intent only** — a service is live when its mode allows it *and* its settings are present, so switching trains off keeps the API key and station stored for switching back |
+| CFG-07 | A board is provisioned once it has WiFi and **at least one** live service. A boats-only board needs no API key and no station at all |
+| CFG-08 | Legacy `mode` values are still honoured, so a board flashed before the river screen keeps working with its stored settings untouched: absent and `both` both mean `train,bus`; a lone `train` or `bus` is already a valid one-element set |
+| CFG-09 | `mode` matching is on whole comma-separated tokens, never substrings, so a malformed value cannot switch on a service the user did not choose |
 
 ---
 
@@ -289,15 +361,17 @@ generic and shareable.
 | DISP-09 | Flicker-free rendering via a full-frame PSRAM sprite back-buffer at ~30 fps |
 | DISP-10 | Clock time from NTP; timezone from the provisioned POSIX `tz` (set from the user's PC locale), falling back to UK. Set via `configTzTime` so DST applies |
 | DISP-11 | An invalid departure CRS (API returns HTTP 400) shows a dedicated red "Unknown station" screen, not a generic connectivity error |
-| DISP-12 | With both services live, the board cycles **trains for 30 s, then buses for 15 s**, repeating (`TRAIN_SCREEN_SECONDS` / `BUS_SCREEN_SECONDS`); with one service it stays on that screen |
+| DISP-12 | The board cycles through every live service in a fixed order — trains (30 s), buses (15 s), boats (15 s) — skipping those that are off; with one service it stays on that screen |
 | DISP-13 | The bus screen shows up to 3 arrivals laid out like a train row: expected time, route number, destination, and a right-aligned countdown ("Due" under a minute, otherwise "N min") |
 | DISP-14 | Bus countdowns tick down live between polls rather than freezing for the 30 s poll interval |
-| DISP-15 | The bus screen is only entered once TfL has answered successfully for the stop at least once; an unconfigured or rejected stop leaves the train board permanently on screen |
+| DISP-15 | A TfL screen is only entered once TfL has answered successfully for that stop or pier at least once; an unconfigured or rejected one simply never joins the rotation |
 | DISP-16 | Marquees reset on every screen change, so long names restart rather than resuming mid-scroll |
-| DISP-17 | The header shows the station/stop name in the large font, with a small dim "TRAIN" / "BUS" (or "BUS <route>") tag beside it |
-| DISP-18 | Both boards share one layout: a header row (mode tag + station/stop name), three identical rows, then the clock |
+| DISP-17 | The header shows the station/stop/pier name in the large font, with a small dim "TRAIN" / "BUS" / "RIVER" (or "BUS <route>" / "RIVER <route>") tag beside it |
+| DISP-18 | All three boards share one layout: a header row (mode tag + station/stop/pier name), three identical rows, then the clock. Buses and boats share the row renderer outright — a boat's "RB1" sits where a bus's "38" does — and differ only in tag and empty-state text |
 | DISP-19 | All three rows use the same font; times and statuses use the smaller font, vertically centred, so the destination column gets the width |
-| DISP-20 | A buses-only board with no arrivals yet shows a "Loading bus arrivals..." splash, not an empty departure board for a station that was never configured |
+| DISP-20 | A board with no train screen and no TfL answer yet shows a "Loading arrivals..." splash, not an empty departure board for a station that was never configured |
+| DISP-21 | The river screen shows up to 3 sailings — expected time, route ("RB1"), destination pier, right-aligned countdown — and its countdowns tick down live between polls exactly as the bus screen's do |
+| DISP-22 | If the screen currently displayed drops out of the rotation (its feed starts failing, or the user switches it off), the board moves to the first screen still in it rather than rendering one nothing feeds |
 
 ---
 
@@ -310,12 +384,13 @@ Newline-terminated line protocol on the USB CDC serial port (`src/config.cpp`).
 | PROV-01 | `PING` → `PONG Esp32Departures` (discovery/handshake) |
 | PROV-02 | `CFG <key>=<value>` → `ACK <key>` (stages a value) |
 | PROV-03 | `COMMIT` → `SAVED`, then the device saves to NVS and reboots |
-| PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `mode`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
+| PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `river`, `riverline`, `rivername`, `mode`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
 | PROV-05 | Protocol available whether provisioned or not, so reconfiguration always works |
 | PROV-06 | Host opens serial with `dtr=True, rts=False` to avoid resetting the ESP32-S3 |
 | PROV-07 | `GET` never returns a secret: the API key is not reported at all and the WiFi password only as `passlen` (its length), which distinguishes an empty or truncated password from a wrong one |
 | PROV-08 | `SCAN` → one `SSID|rssi=|ch=|auth=` line per visible network, then `END`. The ESP32-S3 has no 5 GHz radio, so a network missing here but visible on a phone is the usual explanation for a board that will not connect |
 | PROV-09 | A `COMMIT` stages on top of the current config, so **omitting** a key preserves its stored value — the mechanism INST-11 relies on to avoid retyping secrets |
+| PROV-10 | `GET` reports a legacy `mode` as the set it means (`train,bus`), so the installer only ever has to understand the comma-separated form |
 
 ---
 
@@ -343,9 +418,17 @@ PyInstaller) that flashes the firmware and provisions the board.
 | INST-15 | Name matches that share a name are the same place indexed several times (one per station entrance) and are searched together, not offered as identical-looking choices |
 | INST-16 | The chosen stop is verified against the live feed and the next few arrivals printed, so a wrong stop is caught before anything is written to the board |
 | INST-17 | A blank answer at the stop search **keeps** an already-configured stop; only a board with no stop treats blank as "skip" |
-| INST-18 | Screen-blank hours are echoed back as an off-window with its duration, and an off-window longer than half a day must be confirmed — entering START/END the wrong way round blanks the board for most of the day and reads as broken hardware |
-| INST-19 | The wizard asks which services to show before anything else, then prompts only for what that mode needs — a buses-only board is never asked for an API key or station |
-| INST-20 | A buses-only board must have a stop: the search repeats until one is given, since declining would leave nothing to display |
+| INST-18 | Screen hours are echoed back as the resulting **ON** window with its duration, and any ON window shorter than half a day must be confirmed. ON/OFF entered the wrong way round (22 then 6) still leaves 8 hours, which looks deliberate on its own but almost never is |
+| INST-19 | The wizard runs in two parts: **Part 1 (board basics)** — WiFi, screen hours, refresh, brightness, timezone — then **Part 2 (what the board shows)**. Everything every board needs is settled before any service-specific question |
+| INST-20 | A single-service board must have that service's stop or pier: the prompt repeats until one is given, since declining would leave nothing at all to display |
+| INST-21 | Services are chosen as a **multi-select** ("1,3"), and only the chosen ones are then asked about. A service switched off has its keys **omitted rather than cleared**, so switching it back on later costs no retyping |
+| INST-22 | Piers are chosen **by name from a list**, never by typing a Naptan ID. The list is fetched live from TfL and merged across all four river lines, with a baked-in fallback so setup still works offline |
+| INST-23 | After a stop or pier is chosen the installer prints the next few arrivals from it, so a wrong choice is caught before anything is written to the board |
+| INST-24 | The installer stores the pier's display name alongside its ID (`rivername`), satisfying RIV-13 without the firmware needing a second request |
+| INST-25 | Screen hours are asked **ON first, then OFF** ("on at 6, off at 22"), which is how people describe them, and converted to the firmware's `bstart`/`bend` blank-window form on the way out |
+| INST-26 | A board that has never been configured defaults to **on 06:00–22:00** rather than never blanking; an already-configured board keeps its own hours as the default, including an explicit "never blank" |
+| INST-27 | A service is opted into **once**, in Part 2. The stop and pier sections ask *which*, never *whether* — and a service chosen there but then left without a stop or pier is pruned from `mode`, so the board is never enabled for a screen with nothing behind it |
+| INST-28 | Pier names are folded to ASCII before being shown or stored: TfL returns "St Mary's Wandsworth Pier" with a U+2019 quote, which the board's font cannot draw |
 
 ---
 
@@ -381,8 +464,8 @@ PyInstaller) that flashes the firmware and provisions the board.
 | SEC-04 | No credentials committed to source; `secrets.h` is git-ignored and unused at runtime |
 | SEC-05 | Installer keeps entered secrets in memory only; nothing written to disk on the target PC |
 | SEC-06 | TLS server-certificate verification is a documented hardening option (`setCACert`); default `setInsecure()` is called out as a trade-off |
-| SEC-07 | The TfL request carries no credentials of any kind, so nothing sensitive is exposed by it |
-| SEC-08 | The bus stop code and route filter are percent-encoded into the query string, so a stray character cannot alter the request |
+| SEC-07 | Both TfL requests (bus and river) carry no credentials of any kind, so nothing sensitive is exposed by them |
+| SEC-08 | The bus stop code and route filter are percent-encoded into the query string, and the pier ID into the request path, so a stray character cannot alter either request |
 
 ---
 

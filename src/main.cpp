@@ -8,8 +8,9 @@
 //   * Shared state guarded by a mutex (render never fetches, fetch never draws).
 //   * Exponential back-off; stale data kept with a "No signal" overlay; a
 //     connectivity-warning screen after repeated failures; screen-blank hours.
-//   * Either service is optional: the board can show trains, London buses, or
-//     both. With both it cycles train -> bus -> train; with one it stays put.
+//   * Every service is optional: the board shows any combination of trains,
+//     London buses and river boats, cycling through whichever are configured
+//     and parking on the only one when just one is.
 //   * Until provisioned, shows an "Awaiting setup" screen and listens on serial.
 
 #include <Arduino.h>
@@ -23,6 +24,7 @@
 #include "display.h"
 #include "rail_api.h"
 #include "bus_api.h"
+#include "river_api.h"
 
 // ---------------------------------------------------------------------------
 // Shared state (fetch task writes, render loop reads) — guarded by g_mutex.
@@ -43,6 +45,15 @@ static bool     g_badStop = false;      // stop code rejected by TfL (HTTP 416)
 static bool     g_busHaveData = false;  // at least one successful TfL fetch
 static uint32_t g_busFetchedMs = 0;     // millis() of that fetch, for the countdown
 static uint32_t g_busEpoch = 0;
+
+// River screen state (only touched when a pier is configured).
+static std::vector<RiverArrival> g_river;
+static String   g_riverPierName;
+static int      g_riverErrCount = 0;
+static bool     g_badPier = false;      // pier rejected by TfL (HTTP 404)
+static bool     g_riverHaveData = false;
+static uint32_t g_riverFetchedMs = 0;
+static uint32_t g_riverEpoch = 0;
 
 // ---------------------------------------------------------------------------
 // WiFi + time
@@ -82,11 +93,11 @@ static uint32_t backoffMs(int failures) {
 // ---------------------------------------------------------------------------
 // Fetch task — core 0. Never touches the display.
 //
-// One task drives both feeds rather than one task each: a TLS handshake needs a
-// 16 KB stack, and the two polls are short and never overlap, so sharing a
-// single stack costs nothing and halves the memory. Each feed keeps its own
-// deadline, so the trains can refresh on the user's interval while the buses
-// follow TfL's 30-second cache.
+// One task drives all three feeds rather than one task each: a TLS handshake
+// needs a 16 KB stack, and the polls are short and never overlap, so sharing a
+// single stack costs nothing and thirds the memory. Each feed keeps its own
+// deadline, so the trains refresh on the user's interval, the buses follow
+// TfL's 30-second cache, and the boats poll once a minute.
 // ---------------------------------------------------------------------------
 
 // Poll the rail API once and publish the result. Returns how long to wait.
@@ -170,10 +181,52 @@ static uint32_t fetchBusesOnce() {
     return wait;
 }
 
+// Poll the TfL river feed once and publish the result. Returns how long to wait.
+static uint32_t fetchRiverOnce() {
+    std::vector<RiverArrival> sailings;
+    String pierName;
+    river::Fetch st = river::fetchArrivals(cfg::get(), sailings, pierName);
+    bool ok = (st == river::Fetch::Ok);
+
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    if (ok) {
+        g_river = sailings;
+        g_riverPierName = pierName;
+        g_riverErrCount = 0;
+        g_badPier = false;
+        g_riverHaveData = true;
+        g_riverFetchedMs = millis();
+    } else if (st == river::Fetch::BadPier) {
+        g_badPier = true;          // config error — drop the river screen
+        g_riverHaveData = false;
+        g_riverErrCount = 0;
+    } else {
+        g_riverErrCount++;         // keep last-good sailings on screen (stale)
+        g_badPier = false;
+    }
+    g_riverEpoch++;
+    int fails = g_riverErrCount;
+    xSemaphoreGive(g_mutex);
+
+    if (ok) {
+        Serial.printf("[river] ok: %d sailings at %s\n", (int)sailings.size(), pierName.c_str());
+        return RIVER_REFRESH_SECONDS * 1000UL;
+    }
+    if (st == river::Fetch::BadPier) {
+        Serial.printf("[river] unknown pier '%s' - river screen disabled until reconfigured\n",
+                      cfg::get().river_pier.c_str());
+        return 300000;   // a wrong pier will not fix itself; check back rarely
+    }
+    uint32_t wait = backoffMs(fails);
+    Serial.printf("[river] failed (%d) - retry in %us\n", fails, wait / 1000);
+    return wait;
+}
+
 static void fetchTask(void*) {
     // Signed deadline comparisons, so the scheduler survives millis() wrapping.
     uint32_t nextTrain = millis();
     uint32_t nextBus = millis();
+    uint32_t nextRiver = millis();
 
     for (;;) {
         if (WiFi.status() != WL_CONNECTED) connectWiFi();
@@ -183,6 +236,9 @@ static void fetchTask(void*) {
         }
         if (cfg::get().bus_enabled() && (int32_t)(millis() - nextBus) >= 0) {
             nextBus = millis() + fetchBusesOnce();
+        }
+        if (cfg::get().river_enabled() && (int32_t)(millis() - nextRiver) >= 0) {
+            nextRiver = millis() + fetchRiverOnce();
         }
         vTaskDelay(pdMS_TO_TICKS(500));
     }
@@ -212,7 +268,9 @@ void setup() {
 
     cfg::load();
     const Config& c = cfg::get();
-    Serial.printf("[boot] provisioned=%d station=%s\n", c.provisioned(), c.dep_crs.c_str());
+    Serial.printf("[boot] provisioned=%d mode=%s station=%s bus=%s pier=%s\n",
+                  c.provisioned(), c.mode.length() ? c.mode.c_str() : "train,bus",
+                  c.dep_crs.c_str(), c.bus_stop.c_str(), c.river_pier.c_str());
 
     g_mutex = xSemaphoreCreateMutex();
     ui::begin(c.brightness);
@@ -241,16 +299,25 @@ void setup() {
 // ---------------------------------------------------------------------------
 // Screen rotation
 //
-// The user picks trains, buses, or both. With both, the board alternates
-// train (30s) -> bus (15s) -> train (30s) -> ...; with one service it simply
-// stays on that screen.
+// The user enables any combination of trains, London buses and river boats, and
+// the board cycles through whichever are on — train (30s) -> bus (15s) ->
+// river (15s) -> train -> ... With a single service it simply stays put.
 //
-// The bus screen also has to *earn* its slot by TfL having answered for the
-// stop at least once, so a stop code TfL rejects costs a train-and-bus user
-// nothing more than the trains they already had. On a bus-only board there is
-// no train screen to fall back to, so it shows a loading splash instead.
+// The two TfL screens also have to *earn* their slot by TfL having answered for
+// the stop or pier at least once, so an ID TfL rejects costs the user nothing
+// but that one screen. When nothing has earned a slot yet and there is no train
+// screen to fall back on, the board says what it is waiting for rather than
+// showing an empty departure board for a station that was never configured.
 // ---------------------------------------------------------------------------
-enum class Screen { Train, Bus };
+enum class Screen { Train, Bus, River };
+
+static uint32_t dwellMs(Screen s) {
+    switch (s) {
+        case Screen::Bus:   return BUS_SCREEN_SECONDS * 1000UL;
+        case Screen::River: return RIVER_SCREEN_SECONDS * 1000UL;
+        default:            return TRAIN_SCREEN_SECONDS * 1000UL;
+    }
+}
 
 void loop() {
     cfg::poll_serial();  // allow reconfiguration at any time (COMMIT reboots)
@@ -267,6 +334,13 @@ void loop() {
     static int busErr = 0;
     static bool busReady = false;
     static uint32_t busFetchedMs = 0;
+
+    static uint32_t lastRiverEpoch = 0xFFFFFFFF;
+    static std::vector<RiverArrival> river;
+    static String riverPier;
+    static int riverErr = 0;
+    static bool riverReady = false;
+    static uint32_t riverFetchedMs = 0;
 
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     uint32_t epoch = g_epoch;
@@ -287,6 +361,15 @@ void loop() {
         busStop = g_busStopName;
         lastBusEpoch = busEpoch;
     }
+    uint32_t riverEpoch = g_riverEpoch;
+    riverErr = g_riverErrCount;
+    riverReady = g_riverHaveData;
+    riverFetchedMs = g_riverFetchedMs;
+    if (riverEpoch != lastRiverEpoch) {
+        river = g_river;
+        riverPier = g_riverPierName;
+        lastRiverEpoch = riverEpoch;
+    }
     xSemaphoreGive(g_mutex);
 
     if (isBlankHour()) {
@@ -295,42 +378,59 @@ void loop() {
         return;
     }
 
-    // Decide which screen this frame belongs to.
+    // Which screens are in the rotation this frame, in a fixed order so the
+    // cycle stays predictable as feeds come and go.
+    const Config& c = cfg::get();
+    Screen active[3];
+    int nActive = 0;
+    if (c.train_enabled())              active[nActive++] = Screen::Train;
+    if (c.bus_enabled() && busReady)    active[nActive++] = Screen::Bus;
+    if (c.river_enabled() && riverReady) active[nActive++] = Screen::River;
+
     static Screen screen = Screen::Train;
     static uint32_t screenSince = 0;
     static bool timerStarted = false;
     if (!timerStarted) { screenSince = millis(); timerStarted = true; }
 
-    const Config& c = cfg::get();
-    bool showTrain = c.train_enabled();
-    bool showBus = c.bus_enabled() && busReady;
+    int idx = -1;
+    for (int i = 0; i < nActive; ++i) if (active[i] == screen) idx = i;
 
-    if (showTrain && showBus) {
-        uint32_t dwell = (screen == Screen::Bus ? BUS_SCREEN_SECONDS : TRAIN_SCREEN_SECONDS) * 1000UL;
-        if (millis() - screenSince >= dwell) {
-            screen = (screen == Screen::Train) ? Screen::Bus : Screen::Train;
-            screenSince = millis();
-            ui::resetScroll();    // long names restart rather than resume mid-scroll
-        }
-    } else {
-        // Only one screen to show (or none yet) — park on it and hold the timer
-        // at zero so the first cycle is a full dwell once the other appears.
-        Screen only = showBus ? Screen::Bus : Screen::Train;
-        if (screen != only) { screen = only; ui::resetScroll(); }
+    if (nActive == 0) {
         screenSince = millis();
+    } else if (idx < 0) {
+        // The screen we were on has dropped out of the rotation (TfL started
+        // rejecting its ID, or the user switched it off) — land on the first
+        // one still in it rather than rendering a screen nothing feeds.
+        screen = active[0];
+        screenSince = millis();
+        ui::resetScroll();
+    } else if (nActive == 1) {
+        // Only one screen to show — park on it and hold the timer at zero so the
+        // first cycle is a full dwell once another one appears.
+        screenSince = millis();
+    } else if (millis() - screenSince >= dwellMs(screen)) {
+        screen = active[(idx + 1) % nActive];
+        screenSince = millis();
+        ui::resetScroll();    // long names restart rather than resume mid-scroll
     }
 
-    if (screen == Screen::Bus) {
-        ui::renderBusBoard(bus, busStop, c.bus_line, millis() - busFetchedMs, busErr);
-    } else if (!showTrain) {
-        // Bus-only board with no arrivals yet: there is no train screen to fall
-        // back to, so say what it is waiting for rather than showing an empty
-        // departure board for a station that was never configured.
-        if (busErr >= 3) {
-            ui::renderConnectivityWarning(busStop.length() ? busStop : c.bus_stop, busErr);
+    if (nActive == 0) {
+        // Trains are off and neither TfL feed has answered yet. Report the
+        // worse of the two failures, since a board with no screen at all is
+        // almost always a network problem rather than a quiet stop.
+        int worst = 0;
+        String label;
+        if (c.bus_enabled() && busErr > worst) { worst = busErr; label = c.bus_stop; }
+        if (c.river_enabled() && riverErr > worst) { worst = riverErr; label = c.river_name.length() ? c.river_name : c.river_pier; }
+        if (worst >= 3) {
+            ui::renderConnectivityWarning(label, worst);
         } else {
-            ui::showStartup("Esp32Departures", "Loading bus arrivals...");
+            ui::showStartup("Esp32Departures", "Loading arrivals...");
         }
+    } else if (screen == Screen::Bus) {
+        ui::renderBusBoard(bus, busStop, c.bus_line, millis() - busFetchedMs, busErr);
+    } else if (screen == Screen::River) {
+        ui::renderRiverBoard(river, riverPier, c.river_line, millis() - riverFetchedMs, riverErr);
     } else if (badStation) {
         ui::renderError("Unknown station", c.dep_crs);
     } else {

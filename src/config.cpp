@@ -10,7 +10,8 @@
 //   GET                  -> key=value lines (secrets masked), then END
 //   SCAN                 -> WiFi networks the board can actually see, then END
 //
-// Keys: ssid pass key dep dest plat tz bus busline mode bstart bend bright refr
+// Keys: ssid pass key dep dest plat tz bus busline river riverline rivername mode
+//       bstart bend bright refr
 
 #include "config.h"
 #include "app_config.h"   // compile-time defaults
@@ -38,7 +39,10 @@ void load_from_nvs(Config& c) {
     c.tz          = prefs.getString("tz",   "");
     c.bus_stop    = prefs.getString("bus",  "");
     c.bus_line    = prefs.getString("busln", "");
-    c.mode        = prefs.getString("mode", "");   // "" = both (pre-mode configs)
+    c.river_pier  = prefs.getString("riv",   "");
+    c.river_line  = prefs.getString("rivln", "");
+    c.river_name  = prefs.getString("rivnm", "");
+    c.mode        = prefs.getString("mode", "");   // "" = train+bus (pre-mode configs)
     c.blank_start = prefs.getInt("bstart", -1);
     c.blank_end   = prefs.getInt("bend",   -1);
     c.brightness  = prefs.getInt("bright", BRIGHTNESS);
@@ -62,6 +66,9 @@ void stage_kv(const String& kv) {
     else if (k == "tz")     g_stage.tz         = v;
     else if (k == "bus")    g_stage.bus_stop   = v;
     else if (k == "busline") g_stage.bus_line  = v;
+    else if (k == "river")  g_stage.river_pier = v;
+    else if (k == "riverline") g_stage.river_line = v;
+    else if (k == "rivername") g_stage.river_name = v;
     else if (k == "mode")   g_stage.mode       = v;
     else if (k == "bstart") g_stage.blank_start = v.toInt();
     else if (k == "bend")   g_stage.blank_end   = v.toInt();
@@ -84,6 +91,9 @@ void commit_and_reboot() {
     prefs.putString("tz",   g_stage.tz);
     prefs.putString("bus",  g_stage.bus_stop);
     prefs.putString("busln", g_stage.bus_line);
+    prefs.putString("riv",   g_stage.river_pier);
+    prefs.putString("rivln", g_stage.river_line);
+    prefs.putString("rivnm", g_stage.river_name);
     prefs.putString("mode", g_stage.mode);
     prefs.putInt("bstart", g_stage.blank_start);
     prefs.putInt("bend",   g_stage.blank_end);
@@ -150,7 +160,13 @@ void handle_line(String line) {
         Serial.print("plat=");   Serial.println(g_cfg.platform);
         Serial.print("bus=");    Serial.println(g_cfg.bus_stop);
         Serial.print("busline="); Serial.println(g_cfg.bus_line);
-        Serial.print("mode=");   Serial.println(g_cfg.mode.length() ? g_cfg.mode : String("both"));
+        Serial.print("river=");  Serial.println(g_cfg.river_pier);
+        Serial.print("riverline="); Serial.println(g_cfg.river_line);
+        Serial.print("rivername="); Serial.println(g_cfg.river_name);
+        // Report the legacy word as the set it means, so the installer only
+        // ever has to understand the comma-separated form.
+        Serial.print("mode=");   Serial.println(
+            (g_cfg.mode.isEmpty() || g_cfg.mode == "both") ? String("train,bus") : g_cfg.mode);
         Serial.print("ssid=");   Serial.println(g_cfg.wifi_ssid);
         // Length only, never the password itself - enough to tell an empty or
         // truncated password from a wrong one without leaking it.

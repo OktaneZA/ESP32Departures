@@ -60,6 +60,35 @@
 // Dump the raw TfL response to Serial once per poll (mirrors RAW_JSON_DEBUG).
 #define RAW_BUS_DEBUG         0
 
+// -----------------------------------------------------------------------------
+// River bus arrivals (TfL Unified API) — optional third screen.
+//
+// Uber Boat by Thames Clippers (RB1/RB4/RB6) and the Woolwich Ferry run as TfL
+// "river-bus" services, so their live predictions come from the same open feed
+// as everything else. Only active when a pier is provisioned.
+// -----------------------------------------------------------------------------
+
+// How many river arrivals to show on the river screen (max 3 fit the 170px height).
+#define MAX_RIVER_ARRIVALS    3
+
+// How long the river screen stays up in the rotation (seconds).
+#define RIVER_SCREEN_SECONDS  15
+
+// How often to poll TfL for fresh river predictions (seconds).
+#define RIVER_REFRESH_SECONDS 60
+
+// Ignore sailings further out than this (minutes). Boats are far less frequent
+// than buses — RB6 can be 40 minutes apart — so a bus-sized 30-minute window
+// would leave the screen empty most of the day.
+#define RIVER_MAX_ETA_MINUTES 120
+
+// Hard cap on the TfL response we will buffer (bytes). A busy pier is ~6 KB;
+// anything larger is treated as a failed fetch rather than exhausting the heap.
+#define RIVER_MAX_RESPONSE    32768
+
+// Dump the parsed river predictions to Serial once per poll.
+#define RAW_RIVER_DEBUG       0
+
 // Screen blank hours (24h clock). Blanks the display between START and END to
 // avoid burn-in / light at night. Set both to -1 to disable.
 // Example: START=1, END=5 blanks the board 01:00–05:00.

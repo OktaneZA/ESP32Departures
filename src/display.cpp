@@ -6,10 +6,11 @@
 // Layout is landscape 320x170 (rotation 1) — a wide "platform sign" shape,
 // reimagining the Python app's 256x64 board with room for a big clock.
 //
-// Two boards are drawn here — trains and London buses — and they deliberately
-// share one layout: a header row (mode tag + station/stop name), three identical
-// rows, then the clock. The shared geometry constants and drawHeader() below are
-// what keep them from drifting apart.
+// Three boards are drawn here — trains, London buses and river boats — and they
+// deliberately share one layout: a header row (mode tag + station/stop/pier
+// name), three identical rows, then the clock. The shared geometry constants,
+// drawHeader() and drawArrivalsBoard() below are what keep them from drifting
+// apart; buses and boats differ only in their tag and their "nothing due" text.
 
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
@@ -91,11 +92,12 @@ struct RowScroll {
 };
 RowScroll s_rowScroll[MAX_DEPARTURES];
 RowScroll s_busScroll[MAX_BUS_ARRIVALS];
+RowScroll s_riverScroll[MAX_RIVER_ARRIVALS];
 RowScroll s_headerScroll;
 
-// Both boards share one layout so they read as the same instrument: a header
-// row naming the mode and the stop/station, then three identical rows, then the
-// clock. Times sit in the small font — they are fixed-width and always legible,
+// All three boards share one layout so they read as the same instrument: a
+// header row naming the mode and the station/stop/pier, then three identical
+// rows, then the clock. Times sit in the small font — they are fixed-width and always legible,
 // so shrinking them buys the destination column ~20px it can actually use.
 const lgfx::IFont* const HEAD_FONT  = &fonts::FreeSansBold12pt7b;
 const lgfx::IFont* const ROW_FONT   = &fonts::FreeSans12pt7b;
@@ -171,9 +173,11 @@ String clockTimeIn(int32_t seconds) {
     return String(buf);
 }
 
-// One bus row: [expected time] [route] [destination] [countdown right-aligned].
+// One arrival row: [expected time] [route] [destination] [countdown right-aligned].
 // Time and countdown use the small font; route and destination the row font.
-void drawBusRow(int y, int idx, const BusArrival& ar) {
+// Shared by the bus and river screens — a boat's "RB1" sits where a bus's "38"
+// does — with the caller passing the marquee state for its own screen.
+void drawArrivalRow(int y, RowScroll& scroll, const BusArrival& ar) {
     String eta = formatEta(ar.etaSeconds);
     String when = clockTimeIn(ar.etaSeconds);
 
@@ -196,7 +200,7 @@ void drawBusRow(int y, int idx, const BusArrival& ar) {
     spr.print(ar.line);
 
     const int destMax = W - BUS_DEST_X - ew - 8;
-    drawScrolling(s_busScroll[idx], ar.destination, BUS_DEST_X, y, destMax, rowH);
+    drawScrolling(scroll, ar.destination, BUS_DEST_X, y, destMax, rowH);
 }
 
 // One departure row: [time]  [destination...]  [right-aligned status (+platform)].
@@ -253,6 +257,49 @@ void drawClock(int y) {
     int tw = spr.textWidth(timeStr);
     spr.setCursor((W - tw) / 2, y);
     spr.print(timeStr);
+}
+
+// Stale-data indicator: the feed is failing but the last good data is still on
+// screen. Every board draws it the same way, in the same corner.
+void drawStaleIndicator(int errCount) {
+    if (errCount <= 0) return;
+    char msg[24];
+    snprintf(msg, sizeof(msg), "No signal (%dx)", errCount);
+    spr.setFont(&fonts::Font0);
+    spr.setTextColor(RED, BLACK);
+    spr.setCursor(2, H - 10);
+    spr.print(msg);
+}
+
+// The whole of a bus or river board: header, up to three rows counted down from
+// the moment of the fetch, clock, and the stale-data marker. The two screens are
+// the same instrument pointed at a different feed, so they are the same code.
+void drawArrivalsBoard(const String& tag, const String& name,
+                       const std::vector<BusArrival>& arrivals, RowScroll* scroll,
+                       size_t maxRows, const char* emptyMsg,
+                       uint32_t sinceFetchMs, int errCount) {
+    spr.fillScreen(BLACK);
+    drawHeader(tag, name);
+
+    if (arrivals.empty()) {
+        spr.setFont(HEAD_FONT);
+        spr.setTextColor(DIM, BLACK);
+        spr.setCursor((W - spr.textWidth(emptyMsg)) / 2, 52);
+        spr.print(emptyMsg);
+    } else {
+        // Count the ETAs down from the moment of the fetch, so the numbers keep
+        // moving between polls instead of freezing until the next one.
+        int32_t elapsed = (int32_t)(sinceFetchMs / 1000);
+        for (size_t i = 0; i < arrivals.size() && i < maxRows; ++i) {
+            BusArrival ar = arrivals[i];
+            ar.etaSeconds = ar.etaSeconds > elapsed ? ar.etaSeconds - elapsed : 0;
+            drawArrivalRow(ROW_Y0 + (int)i * ROW_STEP, scroll[i], ar);
+        }
+    }
+
+    drawClock(CLOCK_Y);
+    drawStaleIndicator(errCount);
+    spr.pushSprite(0, 0);
 }
 
 }  // namespace
@@ -335,59 +382,30 @@ void renderBoard(const std::vector<Departure>& deps, const String& station,
     drawClock(CLOCK_Y);
     (void)callingAt;  // calling-at line removed from the layout
 
-    // Stale-data indicator: API is failing but we're still showing last-good data.
-    if (errCount > 0) {
-        char msg[24];
-        snprintf(msg, sizeof(msg), "No signal (%dx)", errCount);
-        spr.setFont(&fonts::Font0);
-        spr.setTextColor(RED, BLACK);
-        spr.setCursor(2, H - 10);
-        spr.print(msg);
-    }
-
+    drawStaleIndicator(errCount);
     spr.pushSprite(0, 0);
 }
 
 void renderBusBoard(const std::vector<BusArrival>& arrivals, const String& stopName,
                     const String& lineFilter, uint32_t sinceFetchMs, int errCount) {
-    spr.fillScreen(BLACK);
+    drawArrivalsBoard(lineFilter.length() ? ("BUS " + lineFilter) : String("BUS"),
+                      stopName, arrivals, s_busScroll, MAX_BUS_ARRIVALS,
+                      "No buses due", sinceFetchMs, errCount);
+}
 
-    drawHeader(lineFilter.length() ? ("BUS " + lineFilter) : String("BUS"), stopName);
-
-    if (arrivals.empty()) {
-        spr.setFont(HEAD_FONT);
-        spr.setTextColor(DIM, BLACK);
-        const char* msg = "No buses due";
-        spr.setCursor((W - spr.textWidth(msg)) / 2, 52);
-        spr.print(msg);
-    } else {
-        // Count the ETAs down from the moment of the fetch, so the numbers keep
-        // moving between polls instead of freezing for 30 seconds.
-        int32_t elapsed = (int32_t)(sinceFetchMs / 1000);
-        for (size_t i = 0; i < arrivals.size() && i < MAX_BUS_ARRIVALS; ++i) {
-            BusArrival ar = arrivals[i];
-            ar.etaSeconds = ar.etaSeconds > elapsed ? ar.etaSeconds - elapsed : 0;
-            drawBusRow(ROW_Y0 + (int)i * ROW_STEP, (int)i, ar);
-        }
-    }
-
-    drawClock(CLOCK_Y);
-
-    if (errCount > 0) {
-        char msg[24];
-        snprintf(msg, sizeof(msg), "No signal (%dx)", errCount);
-        spr.setFont(&fonts::Font0);
-        spr.setTextColor(RED, BLACK);
-        spr.setCursor(2, H - 10);
-        spr.print(msg);
-    }
-
-    spr.pushSprite(0, 0);
+void renderRiverBoard(const std::vector<RiverArrival>& arrivals, const String& pierName,
+                      const String& lineFilter, uint32_t sinceFetchMs, int errCount) {
+    // "RIVER" rather than "BOAT": it is what TfL calls the mode, and it is what
+    // is printed on the piers the board is quoting.
+    drawArrivalsBoard(lineFilter.length() ? ("RIVER " + lineFilter) : String("RIVER"),
+                      pierName, arrivals, s_riverScroll, MAX_RIVER_ARRIVALS,
+                      "No boats due", sinceFetchMs, errCount);
 }
 
 void resetScroll() {
     for (auto& r : s_rowScroll) { r.text = ""; r.offset = 0; }
     for (auto& r : s_busScroll) { r.text = ""; r.offset = 0; }
+    for (auto& r : s_riverScroll) { r.text = ""; r.offset = 0; }
     s_headerScroll.text = "";
     s_headerScroll.offset = 0;
 }

@@ -21,3 +21,10 @@ struct BusArrival {
     String  destination;  // DestinationText, e.g. "Hackney Central"
     int32_t etaSeconds;   // seconds until arrival, measured at fetch time
 };
+
+// A live river-bus sailing carries exactly the same three fields as a bus —
+// the line ("RB1"), where it terminates, and how far off it is — and the pier
+// screen draws them with the same row renderer, so it shares the type rather
+// than duplicating it. TfL gives river predictions as seconds-to-station, so
+// `etaSeconds` means the same thing here as it does for buses.
+using RiverArrival = BusArrival;
