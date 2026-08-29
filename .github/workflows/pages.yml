@@ -31,6 +31,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Stage the firmware into the site and write its manifest with a SHA-256
+      # per image. The binaries live in installer/firmware/ and are shared with
+      # the .exe, so they are copied at publish time rather than tracked twice.
+      - name: Stage firmware and build manifest
+        run: python web/build-firmware.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

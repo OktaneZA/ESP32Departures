@@ -4,6 +4,7 @@
 import * as api from './api.js';
 import * as cfg from './config.js';
 import { Board, isSupported, waitForReconnect, sleep } from './serial.js';
+import * as flasher from './flash.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = cfg.defaultConfig();
@@ -454,21 +455,41 @@ async function connectAndConfigure() {
     await board.open();
 
     logLine('Saying hello…');
-    const banner = await board.handshake();
+    let banner = await board.handshake();
+
     if (!banner) {
-      logLine('The board didn’t answer. Is it running Departure Buddy firmware?', 'bad');
-      logLine('A brand-new board needs flashing first — use the installer for now.');
+      // Nothing answered, so this is almost certainly a board that has never
+      // been flashed. Offer to do it rather than dead-ending the user.
+      logLine('No response — this board has no Departure Buddy firmware yet.');
       await board.close();
-      btn.disabled = false;
-      return;
+      if (!(await flashFirmware(board.port))) { btn.disabled = false; return; }
+
+      logLine('Reconnecting after the flash…');
+      // The board reboots into new firmware and its USB port re-enumerates, so
+      // the handle is stale — reopen before trying to talk to it.
+      if (!(await waitForReconnect(board, 20000))) {
+        logLine('The board restarted but its port came back as a new device.', 'bad');
+        logLine('Click “Connect & configure” again and pick it once more — the '
+          + 'firmware is already on there, so this time it will just apply your settings.');
+        btn.disabled = false;
+        return;
+      }
+      banner = await board.handshake(15000);
+      if (!banner) {
+        logLine('Flashed, but the board is not answering yet. Unplug it, plug it '
+          + 'back in, and click Connect again to apply your settings.', 'bad');
+        await board.close();
+        btn.disabled = false;
+        return;
+      }
     }
     logLine(`Found: ${banner}`, 'ok');
 
     const device = cfg.toDeviceConfig(ui);
     logLine(`Sending ${Object.keys(device).length} settings…`);
     const saved = await board.provision(device, cfg.KEYS, (done, total, key) => {
+      if (key === 'mode') logLine(`  showing: ${device.mode}`);
       if (done === total) logLine(`Sent all ${total} settings.`);
-      else if (key === 'mode') logLine(`  showing: ${device.mode}`);
     });
 
     if (!saved) {
@@ -479,8 +500,6 @@ async function connectAndConfigure() {
     }
     logLine('Saved. The board is rebooting…', 'ok');
 
-    // The board is native USB CDC: rebooting drops the port off the bus and it
-    // comes back as a new device, so the handle we hold is now stale.
     const back = await waitForReconnect(board);
     if (!back) {
       logLine('Done — the board is restarting with your settings.', 'ok');
@@ -493,7 +512,7 @@ async function connectAndConfigure() {
     await board.close();
     if (check) {
       logLine(`Confirmed: showing ${check.mode || '?'}, WiFi ${check.ssid || '?'}, `
-        + `WiFi ${check.wifi === 'up' ? 'connected' : 'connecting…'}`, 'ok');
+        + `${check.wifi === 'up' ? 'connected' : 'still connecting…'}`, 'ok');
     }
     logLine('All done. Enjoy your board.', 'ok');
   } catch (e) {
@@ -502,6 +521,40 @@ async function connectAndConfigure() {
   }
   btn.disabled = false;
   showProblems();
+}
+
+// Download, verify and write the firmware. Returns true if the board was
+// flashed. Kept separate from provisioning because they are genuinely
+// different operations: one replaces the program, the other only its settings.
+async function flashFirmware(port) {
+  let manifest;
+  try {
+    manifest = await flasher.loadManifest();
+  } catch (e) {
+    logLine('No firmware is published here to flash: ' + e.message, 'bad');
+    logLine('Use the installer for a brand-new board, then come back here to '
+      + 'change settings.');
+    return false;
+  }
+  logLine(`Firmware available: ${manifest.name} ${manifest.version}.`);
+  logLine('Flashing takes about a minute. Do not unplug the board.');
+
+  try {
+    const parts = await flasher.fetchImages(manifest, (m) => logLine('  ' + m));
+    logLine('All images verified against their checksums.', 'ok');
+    let lastPct = -1;
+    await flasher.flash(port, parts,
+      (msg) => logLine('  ' + msg),
+      (frac) => {
+        const pct = Math.floor(frac * 100 / 5) * 5;   // log every 5%
+        if (pct !== lastPct) { lastPct = pct; logLine(`  writing… ${pct}%`); }
+      });
+    logLine('Firmware written.', 'ok');
+    return true;
+  } catch (e) {
+    logLine('Flashing failed: ' + (e?.message || e), 'bad');
+    return false;
+  }
 }
 
 // ──────────────────────────────── utils ──────────────────────────────────
