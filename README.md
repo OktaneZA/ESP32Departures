@@ -32,7 +32,8 @@ cancellations in red, and a big clock that keeps itself right.
 
 You need one thing: a **LilyGo T-Display-S3** — around **£12–20**.
 
-### → [Buy on Amazon UK](https://www.amazon.co.uk/LILYGO-T-Display-S3-ESP32-S3-Display-Development/dp/B0BRTT727Z?th=1&linkCode=ll2&tag=oktaneza-21&linkId=5466662ac0076e3e099592eae3f54ffc&ref_=as_li_ss_tl) (Its an affiliate link and its the only kickback I get for maintaining this project)
+### → [Buy on Amazon UK](https://www.amazon.co.uk/LILYGO-T-Display-S3-ESP32-S3-Display-Development/dp/B0BRTT727Z?th=1&linkCode=ll2&tag=oktaneza-21&linkId=5466662ac0076e3e099592eae3f54ffc&ref_=as_li_ss_tl) 
+(Its an affiliate link and its the only kickback I get for maintaining this project)
 
 Also from [LilyGo directly](https://lilygo.cc/en-us/products/t-display-s3) or
 [AliExpress (official store)](https://www.aliexpress.com/item/1005004496543314.html)
