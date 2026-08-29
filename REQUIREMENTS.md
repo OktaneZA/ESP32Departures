@@ -98,7 +98,7 @@ and the LDBWS endpoint (verifying the station and API key).
 
 | Component | Purpose |
 |---|---|
-| `render_mockup.py` (Pillow) | Pixel-accurate renders of the train and bus boards, mirroring `display.cpp` |
+| `render_mockup.py` (Pillow) | Pixel-accurate renders of all three boards, mirroring `display.cpp` — colours derived from its RGB565 constants, and any theme renderable by passing a palette |
 | `ttf_to_lgfx.py` | Converts the dot-matrix TTFs to an `lgfx::GFXfont` header |
 
 ---

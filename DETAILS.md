@@ -94,7 +94,7 @@ ESP32Departures/
 │   ├── bus_api.cpp           TfL live bus arrivals (Countdown/URA) client
 │   ├── river_api.cpp         TfL live river sailings (Unified API) client
 │   └── display.cpp           LovyanGFX panel config + rendering
-├── docs/                     mockup renderer + font-conversion script
+├── docs/                     board mockups, API-key guide, font-conversion script
 ├── web/                      the web configurator (static, hosted on Azure)
 │   ├── index.html            the form, preview and installer UI
 │   ├── js/config.js          config model, mode set, RGB565 colour maths
