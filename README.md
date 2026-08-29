@@ -2,7 +2,6 @@
 
 **A live departure board for your desk.** Real UK train departures, London bus
 arrivals and Thames river boat sailings — on a small screen, updating by itself.
-
 No coding. No soldering. About £15 of hardware and ten minutes — all you need is
 a [LilyGo T-Display-S3](https://www.amazon.co.uk/LILYGO-T-Display-S3-ESP32-S3-Display-Development/dp/B0BRTT727Z?th=1&linkCode=ll2&tag=oktaneza-21&linkId=5466662ac0076e3e099592eae3f54ffc&ref_=as_li_ss_tl) and a USB-C cable.
 
@@ -32,7 +31,8 @@ cancellations in red, and a big clock that keeps itself right.
 
 You need one thing: a **LilyGo T-Display-S3** — around **£12–20**.
 
-### → [Buy on Amazon UK](https://www.amazon.co.uk/LILYGO-T-Display-S3-ESP32-S3-Display-Development/dp/B0BRTT727Z?th=1&linkCode=ll2&tag=oktaneza-21&linkId=5466662ac0076e3e099592eae3f54ffc&ref_=as_li_ss_tl)
+### → [Buy on Amazon UK](https://www.amazon.co.uk/LILYGO-T-Display-S3-ESP32-S3-Display-Development/dp/B0BRTT727Z?th=1&linkCode=ll2&tag=oktaneza-21&linkId=5466662ac0076e3e099592eae3f54ffc&ref_=as_li_ss_tl) 
+(Its an affiliate link and its the only kickback I get for maintaining this project)
 
 Also from [LilyGo directly](https://lilygo.cc/en-us/products/t-display-s3) or
 [AliExpress (official store)](https://www.aliexpress.com/item/1005004496543314.html)
