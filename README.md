@@ -76,8 +76,11 @@ choose colours and timings, see a live preview, then send it all to the board
 over USB from the browser. Nothing you type leaves your computer — the page is
 static and talks to the device directly.
 
-Chrome, Edge and Opera on a desktop can configure the board directly. In Firefox
-and Safari the page instead hands you a settings file to drop onto the installer.
+Chrome, Edge and Opera on a desktop can configure the board directly — including
+flashing a brand-new board, so no installer is needed at all. In Firefox and
+Safari the page instead hands you a settings file to drop onto the installer.
+
+To run it yourself or host your own copy, see **[web/README.md](web/README.md)**.
 
 ## Install — the easy way (Windows)
 

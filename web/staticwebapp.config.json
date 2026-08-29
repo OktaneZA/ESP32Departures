@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/staticwebapp.config.json",
+
+  "mimeTypes": {
+    ".bin": "application/octet-stream",
+    ".json": "application/json"
+  },
+
+  "globalHeaders": {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer"
+  },
+
+  "routes": [
+    {
+      "route": "/firmware/manifest.json",
+      "headers": { "Cache-Control": "no-cache" }
+    },
+    {
+      "route": "/firmware/*.bin",
+      "headers": { "Cache-Control": "no-cache" }
+    }
+  ]
+}
