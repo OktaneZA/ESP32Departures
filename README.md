@@ -76,13 +76,14 @@ the list. That's it — the board restarts showing live times.
 
 ### If you want trains
 
-Train data needs a free key from **[raildata.org.uk](https://raildata.org.uk)**
-(register, then subscribe to "Live Departure Board"). The setup page checks it
-for you before you plug anything in. Buses and boats need no key at all — skip
-this if you're not showing trains.
+Train data needs a free key from the Rail Data Marketplace — register, subscribe
+to "Live Departure Board", and copy the key.
 
-The [installer README](installer/README.md) has a step-by-step walkthrough with
-screenshots.
+### → **[Step-by-step, with screenshots](docs/api-key.md)**
+
+The setup page checks the key for you before you plug the board in, so a typo is
+caught straight away. **Buses and river boats need no key** — skip this entirely
+if you're not showing trains.
 
 ---
 
@@ -97,7 +98,8 @@ itself, so they survive being unplugged — and survive firmware updates too.
 
 | | |
 |---|---|
-| [Setup walkthrough](installer/README.md) | The Windows installer, the API key, and troubleshooting |
+| [Getting your train data key](docs/api-key.md) | Free National Rail key, step by step with screenshots |
+| [Setup walkthrough](installer/README.md) | The Windows installer and troubleshooting |
 | [Technical detail](DETAILS.md) | Building the firmware, the data feeds, project layout |
 | [The setup page itself](web/README.md) | Running or hosting your own copy |
 | [Requirements](REQUIREMENTS.md) | The full specification |

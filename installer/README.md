@@ -19,55 +19,15 @@ brand-new board, for Firefox and Safari users, and for anyone who prefers it.
 It also accepts a settings file exported from that page — see
 [Testing without the GUI](#testing-without-the-gui) for the format.
 
-## The hardware you need
+## Before you start
 
-This project runs on the **LilyGo T-Display-S3** development board:
+You need two things, both covered elsewhere:
 
-| Spec | Detail |
-|---|---|
-| MCU | ESP32-S3 (dual-core, 2.4 GHz WiFi — **no 5 GHz**) |
-| Display | 1.9″ 170×320 ST7789 colour LCD |
-| Memory | 16 MB flash, 8 MB PSRAM |
-| USB | USB-C (native USB, used for flashing + config) |
-
-Get the **standard T-Display-S3** (the non-touch version is all you need; the
-"Touch" variant also works since the app doesn't use touch). Nothing else to buy —
-the LCD, WiFi, and USB are all on-board, no wiring required.
-
-**Where to buy** (made by LilyGo — buy from the official store to avoid clones):
-
-- Official product page: <https://lilygo.cc/en-us/products/t-display-s3>
-- AliExpress (LilyGo official store): <https://www.aliexpress.com/item/1005004496543314.html>
-- Alibaba (standard "with shell" listing): <https://www.alibaba.com/product-detail/LILYGO-TTGO-T-Display-S3-with_1601237505007.html>
-- Alibaba search (all sellers): <https://www.alibaba.com/showroom/lilygo-t--display--s3-esp32--s3.html>
-
-Typical price is around **US$15–27** (varies by seller, promotion, and shipping).
-When ordering, pick the option **with pin headers pre-soldered** if you don't want
-to solder (some listings sell it "unsoldered").
-
-⚠️ Get the **1.9″ ST7789, 170×320** version (the plain "T-Display-S3" or its "Touch
-Edition" — both work). Do **not** buy the look-alikes: the **AMOLED** (1.91″), **Pro**
-(2.33″), **Long** (3.4″), or the older **T-Display** (ESP32, 1.14″) — none are
-compatible with this firmware.
-
-## Get your National Rail API key
-
-The board needs a free API key for live **train** departure data. Skip this
-section entirely if you are setting up a **buses-only** board — TfL's bus feed
-needs no key.
-
-
-1. **Create an account** at **[raildata.org.uk](https://raildata.org.uk/)** — register
-   a **personal account** and verify your email.
-2. **Subscribe to the data feed.** Once your account is set up, open the data-product
-   catalogue and search for **"Live Departure Board"** (LDBWS). Subscribe to it — it's
-   the **free open tier** and approval is usually instant.
-   - ⚠️ Don't pick the **"Demo Version"** — it's capped at 100 calls / 30 days, which a
-     60-second refresh uses up almost immediately.
-3. **Copy your key.** Open the subscribed product and go to the **"Specification"** tab.
-   Under **"API access credentials"** you'll find your **Consumer key** — copy it.
-   (Ignore the "Consumer secret"; the board only needs the key.)
-4. Paste that Consumer key into the installer when it asks for the **LDBWS API key**.
+- **The board** — a LilyGo T-Display-S3. Which one to buy and where is on the
+  [front page](../README.md#1-buy-the-board).
+- **A train data key** — free, from the Rail Data Marketplace. Step-by-step with
+  screenshots: **[Getting your train data key](../docs/api-key.md)**. Skip it
+  entirely for a buses-or-boats-only board; those feeds need no key.
 
 ## For end users
 
