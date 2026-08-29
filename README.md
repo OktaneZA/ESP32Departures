@@ -1,228 +1,117 @@
-# Departure Buddy — UK Train, London Bus & River Boat Board (LilyGo T-Display-S3)
+# Departure Buddy
 
-A simple non coding, non soldering low cost tool to show live departures. It takes a little time to configure
-and is bases off the **LilyGo T-Display-S3** (ESP32-S3, 1.9″ 170×320 ST7789 LCD - see 
-   **[installer README](installer/README.md)** for details). The device fetches live data
-for National UK trains, **live London bus arrivals** buses and **live river boat sailings** (Uber Boat by Thames Clippers and the
-Woolwich Ferry) departures over WiFi. Every service is optional and based on your location — enable any
-combination and the board cycles through them.
+**A live departure board for your desk.** Real UK train departures, London bus
+arrivals and Thames river boat sailings — on a small screen, updating by itself.
 
-The aim was to make this even simpler and cheaper than previous iterations — £10 + some effort and you can have this running.
-
-> **Credits.** The train board is Derived from Chris Crocker-White's
-> [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display)
-> (original concept, layout, and dot-matrix fonts) via this repo's native
-> Raspberry Pi rewrite. See [REQUIREMENTS.md](REQUIREMENTS.md) for full lineage.
-
-This tool uses the **National Rail (Darwin) data**, but via the modern REST/JSON
-**Live Departure Board (LDBWS)** product on the free **[Rail Data Marketplace](https://raildata.org.uk)** — parsed on-device with
-ArduinoJson. (The old SOAP token no longer works; the marketplace REST API
-replaced it.) - See the installer readme on how to setup keys for your device (its free!)
-
-## What it looks like
-
-All three screens share one layout: a header row naming the mode and the
-station, stop or pier, three rows, then the clock. The board cycles through
-whichever you have enabled.
+No coding. No soldering. About £15 of hardware and ten minutes.
 
 ![The train screen running on the board](docs/Train.jpg)
 
-*Trains — departures for Motspur Park, with per-train status ("On time" /
-"Exp HH:MM" / "Cancelled" in red) and platform. Long destinations scroll, caught
-here mid-marquee on "London Waterloo".*
+---
+
+## What it shows
+
+Pick any combination and the board cycles through them.
+
+| | |
+|---|---|
+| **Trains** | Anywhere in the UK, from National Rail |
+| **London buses** | Any stop, live from TfL |
+| **River boats** | Uber Boat by Thames Clippers and the Woolwich Ferry |
 
 ![The bus screen running on the board](docs/Bus.jpg)
-
-*London buses — expected time, route number, destination, and a countdown that
-ticks down between polls. A hail & ride stop with a single K5 due.*
-
 ![The river screen running on the board](docs/River.jpg)
 
-*River boats — Uber Boat by Thames Clippers sailings from Vauxhall St George
-Wharf Pier, with the RB6 route where a bus route number would sit.*
+Each screen shows the next three departures with live countdowns, delays and
+cancellations in red, and a big clock that keeps itself right.
 
-Two mockups rendered by `docs/render_mockup.py` — which mirrors
-`src/display.cpp` pixel-for-pixel — are also in `docs/` if you want the layout
-without a camera in the way.
+---
 
+## 1. Buy the board
 
-## What it does
+You need one thing: a **LilyGo T-Display-S3** — around **£12–20**.
 
-- Live departures for a station (optionally filtered to a destination or platform)
-- **Trains, buses, boats — any combination** — you choose at setup. The board
-  cycles through whatever is enabled (trains 30s, buses 15s, boats 15s); with a
-  single service it stays on that screen
-- **London bus arrivals** for one stop from TfL's open Countdown feed — expected
-  time, route number, destination, and a "Due" / "N min" countdown that ticks
-  between polls
-- **River boat sailings** for one Thames pier from TfL's open Unified API —
-  Uber Boat by Thames Clippers (RB1/RB4/RB6) and the Woolwich Ferry, drawn on
-  the same layout as the bus screen with the route ("RB1") where the bus number
-  goes. Real live predictions, not a timetable
-- Top three departures: time + destination, with status (delay/cancellation)
-  and platform when relevant; long names scroll
-- **Your own colours and timings** — theme the board (classic amber, white,
-  phosphor green, high contrast, or anything you pick) and choose how long each
-  screen holds, all without recompiling
-- Big NTP clock in a dot-matrix font, with automatic BST
-- Exponential back-off on API failure, stale data kept on screen with a
-  "No signal" indicator, and a connectivity-warning screen after 3 failures
-- Optional screen-blank hours; runtime-adjustable brightness
+### → [lilygo.cc/en-us/products/t-display-s3](https://lilygo.cc/en-us/products/t-display-s3)
 
-## Set it up in your browser
+Also on [AliExpress (official LilyGo store)](https://www.aliexpress.com/item/1005004496543314.html).
 
-### → **[Open the configurator](https://wonderful-pond-001d18503.7.azurestaticapps.net)**
+Get the standard **1.9″ 170×320** version. The Touch edition works too. Choose
+**pin headers pre-soldered** unless you want to solder. Nothing else to buy —
+screen, WiFi and USB-C are all on board.
 
-The quickest route is the **web configurator**: pick your station, stop and pier,
-choose colours and timings, see a live preview, then send it all to the board
-over USB from the browser. Nothing you type leaves your computer — the page is
-static and talks to the device directly.
+> ⚠️ Don't buy the look-alikes: **AMOLED** (1.91″), **Pro** (2.33″), **Long**
+> (3.4″), or the older **T-Display** (ESP32, 1.14″). None of them work with this.
 
-Chrome, Edge and Opera on a desktop can configure the board directly — including
-flashing a brand-new board, so no installer is needed at all. In Firefox and
-Safari the page instead hands you a settings file to drop onto the installer.
+---
 
-To run it yourself or host your own copy, see **[web/README.md](web/README.md)**.
+## 2. Open the setup page
 
-## Install — the easy way (Windows)
+### → **[tinyurl.com/bdddxxr4](https://tinyurl.com/bdddxxr4)**
 
-Most people should use the **self-contained Windows installer** — no toolchain,
-no editing files, no compiling:
+<img src="docs/bdddxxr4-qr.png" alt="QR code linking to the setup page" width="180">
 
-1. Get a LilyGo T-Display-S3 and a free LDBWS API key. The
-   **[installer README](installer/README.md)** has the hardware buying links and a
-   step-by-step raildata.org.uk walkthrough for the key.
-2. Plug the board into USB and run **`DepartureBuddyInstaller.exe`**.
-3. Answer the prompts. It asks first which services you want — **trains,
-   London buses, river boats**, any combination — then only what those need. A
-   boats-only board is never asked for an API key or a station, and the pier is
-   picked by name from a list rather than by ID. Done — the board reboots
-   showing live times.
+Use **Chrome or Edge on a computer** — they can talk to the board over USB.
+(Firefox and Safari can't, so they give you a settings file for the Windows
+installer instead.)
 
-Settings are stored **on the device**, so run the installer again any time. If a
-configured board is detected it offers three choices:
+---
 
-| | What it does |
+## 3. Set it up
+
+Everything happens on that one page.
+
+![Choosing what the board shows](docs/configurator-services.png)
+
+Find your stop by **postcode, place name, or station name** — no codes to look
+up. It shows you what's actually due right now, so you know you picked the
+right one.
+
+![Live preview of the board](docs/configurator-preview.png)
+
+Choose your colours and how long each screen stays up, and watch the preview
+change as you go.
+
+Then plug the board into USB, click **Connect & configure**, and pick it from
+the list. That's it — the board restarts showing live times.
+
+### If you want trains
+
+Train data needs a free key from **[raildata.org.uk](https://raildata.org.uk)**
+(register, then subscribe to "Live Departure Board"). The setup page checks it
+for you before you plug anything in. Buses and boats need no key at all — skip
+this if you're not showing trains.
+
+The [installer README](installer/README.md) has a step-by-step walkthrough with
+screenshots.
+
+---
+
+## Changing it later
+
+Go back to the same page any time and reconfigure. Settings live on the board
+itself, so they survive being unplugged — and survive firmware updates too.
+
+---
+
+## More
+
+| | |
 |---|---|
-| **[C] Change settings** | Keeps the firmware, walks the prompts |
-| **[U] Update firmware only** | Asks nothing — new firmware, every setting kept |
-| **[F] Update firmware AND change settings** | Both |
+| [Setup walkthrough](installer/README.md) | The Windows installer, the API key, and troubleshooting |
+| [Technical detail](DETAILS.md) | Building the firmware, the data feeds, project layout |
+| [The setup page itself](web/README.md) | Running or hosting your own copy |
+| [Requirements](REQUIREMENTS.md) | The full specification |
 
-Every prompt is pre-filled from what the board is already using, and the WiFi
-password and API key accept a blank answer meaning *keep the existing one*, so
-neither ever has to be retyped. Full details:
-**[installer/README.md](installer/README.md)**.
+---
 
-## Build from source (developers only)
-
-You only need this to modify the firmware. Configuration is **not** compiled in —
-the board is provisioned at runtime (by the installer, or the serial protocol in
-`src/config.cpp`), so there is **no `secrets.h` to edit**.
-
-1. Install **[PlatformIO](https://platformio.org/install)** (VS Code extension or
-   the `pio` CLI).
-2. Build / flash / monitor:
-   ```bash
-   pio run                 # compile
-   pio run -t upload       # flash over USB-C
-   pio device monitor      # serial logs (115200)
-   ```
-3. Provision the freshly-flashed board with the installer, or by sending the
-   serial protocol directly (`PING` / `CFG key=value` / `COMMIT`). `GET` reports
-   the current config (secrets never echoed — the WiFi password only as
-   `passlen`) and `SCAN` lists the networks the board's own radio can see, which
-   is usually the fastest way to diagnose a board that will not connect.
-
-Compile-time tunables live in `include/app_config.h`: layout, back-off, time
-window, `HIDE_ONTIME_STATUS`, `RAW_JSON_DEBUG`, the bus settings
-(`TRAIN_SCREEN_SECONDS`, `BUS_SCREEN_SECONDS`, `BUS_REFRESH_SECONDS`,
-`MAX_BUS_ARRIVALS`, `RAW_BUS_DEBUG`) and the river settings
-(`RIVER_SCREEN_SECONDS`, `RIVER_REFRESH_SECONDS`, `MAX_RIVER_ARRIVALS`,
-`RIVER_MAX_ETA_MINUTES`, `RAW_RIVER_DEBUG`). After a firmware change, refresh
-the installer's bundled binary: copy `.pio/build/lilygo-t-display-s3/firmware.bin`
-into `installer/firmware/` and run `installer/build_exe.py`.
-
-## How it maps to the Pi app
-
-| Pi app (Python)                         | This firmware (C++)                          |
-|-----------------------------------------|----------------------------------------------|
-| OpenLDBWS SOAP + `xmltodict`            | LDBWS REST/JSON + ArduinoJson (`rail_api.cpp`) |
-| `luma.oled` SSD1322 256×64 mono         | LovyanGFX ST7789 320×170 colour (`display.cpp`) |
-| render thread + fetch thread + `Lock`   | `loop()` (core 1) + fetch task (core 0) + mutex |
-| exponential back-off (ARCH-01)          | `backoffMs()` in `main.cpp`                  |
-| stale data + "No signal" (ARCH-02)      | `errCount` overlay in `renderBoard()`        |
-| connectivity warning (ARCH-03)          | `renderConnectivityWarning()`                |
-| blank hours (DISP-05)                   | `isBlankHour()`                              |
-| config file + install.sh                | on-device NVS + USB installer (`config.cpp`) |
-| PIL dot-matrix TTF fonts                | dot-matrix clock via `docs/ttf_to_lgfx.py` (rows use FreeSans) |
-| (no bus support)                        | optional TfL bus screen (`bus_api.cpp`), cycled from `loop()` |
-| (no river support)                      | optional TfL river screen (`river_api.cpp`), same rotation |
-
-## Project layout
-
-```
-ESP32Departures/
-├── platformio.ini            PlatformIO env, board, libs
-├── REQUIREMENTS.md           canonical requirements + attribution
-├── include/
-│   ├── app_config.h          compile-time tunables
-│   ├── config.h              on-device (NVS) runtime config
-│   ├── dotmatrix_fonts.h     generated dot-matrix font (clock)
-│   ├── model.h / rail_api.h / bus_api.h / river_api.h / display.h
-├── src/
-│   ├── main.cpp              WiFi, NTP, fetch task, render loop
-│   ├── config.cpp            NVS config + USB-serial provisioning
-│   ├── rail_api.cpp          National Rail LDBWS REST/JSON client
-│   ├── bus_api.cpp           TfL live bus arrivals (Countdown/URA) client
-│   ├── river_api.cpp         TfL live river sailings (Unified API) client
-│   └── display.cpp           LovyanGFX panel config + rendering
-├── docs/                     mockup renderer + font-conversion script
-├── web/                      the web configurator (static, GitHub Pages)
-│   ├── index.html            the form, preview and installer UI
-│   ├── js/config.js          config model, mode set, RGB565 colour maths
-│   ├── js/api.js             TfL / postcode / rail lookups (ports of installer.py)
-│   ├── js/serial.js          Web Serial provisioning (PING/CFG/COMMIT)
-│   └── data/stations.json    2,608 UK stations: CRS, name, position
-└── installer/                self-contained Windows installer (.exe)
-```
-
-## Notes
-
-- **Verify field names on first run:** the LDBWS JSON serialises the SOAP schema;
-  `destination` and `subsequentCallingPoints` vary in nesting. `rail_api.cpp`
-  parses both known shapes; set `RAW_JSON_DEBUG 1` in `app_config.h` to print a
-  raw response and confirm, then set it back.
-- **API route:** if your subscription's "API" tab shows a base path other than
-  `1010-live-departure-board-dep1_2/...`, update `kBase` in `rail_api.cpp`.
-- **TLS:** `rail_api.cpp` calls `client.setInsecure()` — encrypted but the server
-  certificate isn't verified. For full protection paste `api1.raildata.org.uk`'s
-  root CA and switch to `client.setCACert(...)` (a hook is already in place).
-- **Calling points** arrive in the same response but aren't shown in the current
-  top-three layout (`FETCH_CALLING_POINTS 0`).
-- **London buses** come from TfL's
-  [Live Bus & River Bus Arrivals API](https://content.tfl.gov.uk/tfl-live-bus-river-bus-arrivals-api-documentation.pdf)
-  (the Countdown "URA" feed), which needs no key. Its responses are one JSON
-  array per line, and fields come back in the spec's own sequence order rather
-  than the order requested — `bus_api.cpp` documents the exact shape it relies
-  on, and `RAW_BUS_DEBUG` in `app_config.h` prints raw lines to check it.
-  Screen timings are `TRAIN_SCREEN_SECONDS` / `BUS_SCREEN_SECONDS`.
-  Data provided by Transport for London.
-- **River boats** come from TfL's Unified API `river-bus` mode
-  (`https://api.tfl.gov.uk/StopPoint/{pier}/Arrivals`), which also needs no key.
-  Despite its name, the Countdown/URA feed the bus screen uses returns *only*
-  buses — piers are not in it — which is why this is a separate client. Note
-  the pier ID must be the **port** (`930GCAW`), not one of the berths
-  (`9300CAW1`): a berth sees only half its pier's sailings. `timeToStation` is
-  already relative, so the countdown is right even before NTP has synced.
-  RB2 (Tate to Tate) is not published on this feed. Screen timing is
-  `RIVER_SCREEN_SECONDS`. Data provided by Transport for London.
-- **The web configurator needs no backend.** Every API it uses is CORS-open, so
-  it is plain static hosting: TfL Unified and Countdown send
-  `Access-Control-Allow-Origin: *`, postcodes.io the same, and Rail Data
-  Marketplace reflects the requesting origin — which even lets the page check
-  your API key before you plug anything in. One catch worth knowing if you
-  extend it: adding *any* custom request header makes those calls non-simple,
-  and the TfL endpoints answer the GET but not the CORS preflight, so the
-  request fails. `web/js/api.js` deliberately sends none.
-- **Station positions** come from NaPTAN (Open Government Licence v3); CRS codes
-  are cross-checked against it, with 2,606 of 2,608 confirmed to within 2km.
+> **Credits.** The train board is derived from Chris Crocker-White's
+> [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display)
+> (original concept, layout, and dot-matrix fonts) via this repo's
+> [Raspberry Pi rewrite](https://github.com/OktaneZA/PiDepartures).
+> See [REQUIREMENTS.md](REQUIREMENTS.md) for full lineage.
+>
+> Bus and river data provided by **Transport for London**. Train data from
+> **National Rail Darwin** via the
+> [Rail Data Marketplace](https://raildata.org.uk). Station positions contain
+> public sector information licensed under the
+> [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
