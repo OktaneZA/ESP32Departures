@@ -1,5 +1,7 @@
 # Departure Buddy — web configurator
 
+**Live at <https://wonderful-pond-001d18503.7.azurestaticapps.net>**
+
 A static page that configures a board: pick your station, stop and pier, choose
 colours and timings, preview the result, then send it to the device over USB
 from the browser — or download a settings file for the Windows installer.

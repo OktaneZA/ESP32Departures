@@ -71,6 +71,8 @@ without a camera in the way.
 
 ## Set it up in your browser
 
+### → **[Open the configurator](https://wonderful-pond-001d18503.7.azurestaticapps.net)**
+
 The quickest route is the **web configurator**: pick your station, stop and pier,
 choose colours and timings, see a live preview, then send it all to the board
 over USB from the browser. Nothing you type leaves your computer — the page is
