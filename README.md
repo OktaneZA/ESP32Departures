@@ -18,12 +18,22 @@ Pick any combination and the board cycles through them.
 | **Trains** | Anywhere in the UK, from National Rail |
 | **London buses** | Any stop, live from TfL |
 | **River boats** | Uber Boat by Thames Clippers and the Woolwich Ferry |
+| **Weather** | Right where your stop is — no extra setup |
+| **A big clock** | The time, filling the screen |
 
 ![The bus screen running on the board](docs/Bus.jpg)
 ![The river screen running on the board](docs/River.jpg)
 
 Each screen shows the next three departures with live countdowns, delays and
 cancellations in red, and a big clock that keeps itself right.
+
+Overnight it doesn't just go dark — it turns down to a dimmed clock you can
+still read across a room.
+
+**The two buttons on the front do something useful.** The lower one puts the
+clock up full-screen, and again puts it back; the upper one skips straight to
+the next panel instead of waiting. Overnight, either wakes the board to full
+brightness for a few seconds.
 
 ---
 

@@ -31,6 +31,7 @@ function initHours() {
       ui.onHour = ui.offHour = -1;
       $('onHour').value = $('offHour').value = '-1';
       $('hoursSummary').textContent = 'The screen stays on all the time.';
+      $('nightField').hidden = true;      // nothing blanks, so nothing to dim
     } else if (ui.onHour === ui.offHour) {
       $('hoursSummary').textContent = 'ON and OFF can’t be the same hour — pick two different times.';
     } else {
@@ -40,10 +41,13 @@ function initHours() {
         : '';
       $('hoursSummary').textContent =
         `On ${pad(ui.onHour)}:00–${pad(ui.offHour)}:00 (${lit}h), off the other ${24 - lit}h.${warn}`;
+      $('nightField').hidden = false;
     }
     render();
   };
   $('onHour').onchange = $('offHour').onchange = sync;
+  $('nightClock').checked = ui.nightClock;
+  $('nightClock').onchange = () => { ui.nightClock = $('nightClock').checked; render(); };
   sync();
 }
 const pad = (n) => String(n).padStart(2, '0');
@@ -121,6 +125,7 @@ function initTrains() {
       b.onclick = () => {
         ui.dep = s.c;
         ui.depName = s.n;
+        setWeatherFrom(s.y, s.x, s.n);
         $('stationChosen').hidden = false;
         $('stationChosen').textContent = `Showing departures from ${s.n} (${s.c}).`;
         out.innerHTML = '';
@@ -208,6 +213,7 @@ function initBuses() {
 async function chooseStop(stop) {
   ui.bus = stop.code;
   ui.busName = stop.name;
+  if (stop.lat != null && stop.lon != null) setWeatherFrom(stop.lat, stop.lon, stop.name);
   const el = $('busChosen');
   el.hidden = false;
   el.textContent = `Showing ${stop.name} (${stop.code}). Checking what’s due…`;
@@ -237,6 +243,7 @@ async function loadPiers() {
     if (!p) { ui.river = ui.rivername = ''; el.hidden = true; render(); return; }
     ui.river = p.id;
     ui.rivername = p.name;
+    if (p.lat != null && p.lon != null) setWeatherFrom(p.lat, p.lon, p.name);
     el.hidden = false;
     el.textContent = `Showing ${p.name}. Checking what’s sailing…`;
     render();
@@ -251,6 +258,22 @@ async function loadPiers() {
     render();
   };
   $('riverline').oninput = () => { ui.riverline = $('riverline').value.trim().toUpperCase(); render(); };
+}
+
+// The weather location is never asked for: it comes from whatever stop, station
+// or pier was chosen. The first pick wins, so switching a bus stop later does
+// not silently move the weather away from the station someone set up first.
+function setWeatherFrom(lat, lon, name) {
+  if (ui.wxLat !== null) return;
+  ui.wxLat = lat;
+  ui.wxLon = lon;
+  ui.wxName = name;
+  const el = $('wxChosen');
+  if (el) {
+    el.hidden = false;
+    el.textContent = `Weather for ${name}.`;
+  }
+  render();
 }
 
 // ───────────────────────────── appearance ────────────────────────────────
@@ -292,7 +315,8 @@ function syncColourInputs() {
 function buildDwellSliders() {
   const wrap = $('dwells');
   wrap.innerHTML = '';
-  const keys = { train: 'dwtrain', bus: 'dwbus', river: 'dwriver' };
+  const keys = { train: 'dwtrain', bus: 'dwbus', river: 'dwriver',
+                 weather: 'dwwx', clock: 'dwclock' };
   const shown = cfg.SERVICES.filter((s) => ui.services.includes(s.id));
   $('dwellWrap').hidden = shown.length < 2;   // nothing rotates with one screen
   for (const s of shown) {
@@ -333,12 +357,27 @@ function render() {
   const fg = cfg.quantise(c.fg), dim = cfg.quantise(c.dim);
   const warn = cfg.quantise(c.warn), bg = cfg.quantise(c.bg);
 
+  // The clock screen is not a header-and-rows board, so it is drawn whole.
+  if (previewScreen === 'clock') {
+    $('preview').innerHTML = `
+      <div class="board bigclock" style="background:${bg};color:${fg}">
+        <div class="bc-time">${nowClock().slice(0, 5)}</div>
+      </div>`;
+    showProblems();
+    return;
+  }
+
   let tag = 'TRAIN', name = ui.depName || 'Your station', rows, empty = null;
   if (previewScreen === 'bus') {
     tag = ui.busline ? `BUS ${ui.busline}` : 'BUS';
     name = ui.busName || 'Your stop';
     rows = (ui.busPreview || []).map((r) => ({ a: clock(r.mins), b: r.line, c: r.dest, d: r.mins < 1 ? 'Due' : r.mins + ' min' }));
     if (!rows.length) empty = 'No buses due';
+  } else if (previewScreen === 'weather') {
+    tag = 'WEATHER';
+    name = ui.wxName || 'Your area';
+    rows = [];
+    empty = 'Live conditions';
   } else if (previewScreen === 'river') {
     tag = ui.riverline ? `RIVER ${ui.riverline}` : 'RIVER';
     name = ui.rivername || 'Your pier';
@@ -397,6 +436,9 @@ function problems() {
   if (ui.services.includes('train') && !ui.key) out.push('A National Rail API key, or turn trains off.');
   if (ui.services.includes('bus') && !ui.bus) out.push('A bus stop, or turn buses off.');
   if (ui.services.includes('river') && !ui.river) out.push('A pier, or turn river boats off.');
+  if (ui.services.includes('weather') && ui.wxLat === null) {
+    out.push('Somewhere to show the weather for — pick a station, stop or pier above.');
+  }
   return out;
 }
 

@@ -17,6 +17,8 @@ Run with no arguments to regenerate everything:
   mockup-train.png        train board
   mockup-bus.png          London bus arrivals
   mockup-river.png        river boat sailings
+  mockup-clock.png        the full-screen clock
+  mockup-weather.png      current conditions
   mockup-scroll-demo.png  train board, delayed + cancelled
   mockup-bus-busy.png     bus screen, destination too long for its column
 """
@@ -53,6 +55,10 @@ f_row_bold = ImageFont.truetype(f"{WIN}/arialbd.ttf", 22 * SCALE)   # FreeSansBo
 f_row = ImageFont.truetype(f"{WIN}/arial.ttf", 22 * SCALE)          # FreeSans12pt7b
 f_status = ImageFont.truetype(f"{WIN}/arial.ttf", 15 * SCALE)       # FreeSans9pt7b
 f_clock = ImageFont.truetype(os.path.join(FONT_DIR, "Dot Matrix Bold.ttf"), 38 * SCALE)
+# The big clock, matching Clock_Bold_104 baked from the same TTF by ttf_to_lgfx.py.
+f_big = ImageFont.truetype(os.path.join(FONT_DIR, "Roboto-Bold.ttf"), 104 * SCALE)
+f_temp = ImageFont.truetype(f"{WIN}/arialbd.ttf", 34 * SCALE)   # FreeSansBold24pt7b
+f_row_bold_sm = ImageFont.truetype(f"{WIN}/arialbd.ttf", 15 * SCALE)  # FreeSansBold9pt7b
 
 
 def sx(v):
@@ -173,6 +179,141 @@ def render_arrivals(tag, name, arrivals, empty_msg, out_name, pal=CLASSIC):
     finish(img, draw, out_name, pal)
 
 
+def render_clock(out_name, pal=CLASSIC, drift=(0, 0)):
+    """Mirrors renderClock(): HH:MM filling the panel, with the flip-clock seam.
+    `drift` is the few-pixel nudge night mode applies so nothing sits still."""
+    img = Image.new("RGB", (sx(W), sx(H)), pal["bg"])
+    draw = ImageDraw.Draw(img)
+
+    now = datetime.now().strftime("%H:%M")
+    bb = draw.textbbox((0, 0), now, font=f_big)
+    x = (sx(W) - (bb[2] - bb[0])) / 2 - bb[0] + sx(drift[0])
+    y = (sx(H) - (bb[3] - bb[1])) / 2 - bb[1] + sx(drift[1])
+    draw.text((x, y), now, font=f_big, fill=pal["fg"])
+
+    # The seam, drawn in the background colour so it reads as a fold rather
+    # than a line laid over the digits.
+    mid = sx(H) / 2 + sx(drift[1])
+    draw.rectangle([0, mid - SCALE, sx(W), mid + SCALE], fill=pal["bg"])
+    bezel_and_save(img, out_name)
+
+
+# --- weather icons ----------------------------------------------------------
+# Drawn from primitives rather than shipped as bitmaps: they cost almost no
+# flash, scale to any size, and take the theme colour for free. Mirrors what
+# drawWeatherIcon() does on the device.
+
+def _sun(draw, cx, cy, r, fill, rays=True):
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=fill)
+    if not rays:
+        return
+    import math
+    for i in range(8):
+        a = i * math.pi / 4
+        x0, y0 = cx + math.cos(a) * r * 1.45, cy + math.sin(a) * r * 1.45
+        x1, y1 = cx + math.cos(a) * r * 2.05, cy + math.sin(a) * r * 2.05
+        draw.line([x0, y0, x1, y1], fill=fill, width=max(2, int(r * 0.28)))
+
+
+def _cloud(draw, cx, cy, w, fill):
+    """A cloud as three lobes over a slab — the shape reads at 60px."""
+    r = w * 0.30
+    draw.ellipse([cx - w * 0.46, cy - r * 0.5, cx - w * 0.46 + r * 1.6, cy - r * 0.5 + r * 1.6], fill=fill)
+    draw.ellipse([cx - w * 0.12, cy - r * 1.05, cx - w * 0.12 + r * 2.0, cy - r * 1.05 + r * 2.0], fill=fill)
+    draw.ellipse([cx + w * 0.12, cy - r * 0.35, cx + w * 0.12 + r * 1.5, cy - r * 0.35 + r * 1.5], fill=fill)
+    draw.rounded_rectangle([cx - w * 0.48, cy + r * 0.15, cx + w * 0.48, cy + r * 0.95],
+                           radius=r * 0.4, fill=fill)
+
+
+def _drops(draw, cx, cy, w, fill, n=3, slant=True):
+    for i in range(n):
+        x = cx + (i - (n - 1) / 2) * w * 0.26
+        dx = w * 0.10 if slant else 0
+        draw.line([x + dx, cy, x - dx, cy + w * 0.30], fill=fill, width=max(2, int(w * 0.055)))
+
+
+def _flakes(draw, cx, cy, w, fill, n=3):
+    for i in range(n):
+        x = cx + (i - (n - 1) / 2) * w * 0.26
+        r = w * 0.055
+        draw.ellipse([x - r, cy + w * 0.10 - r, x + r, cy + w * 0.10 + r], fill=fill)
+
+
+def draw_weather_icon(draw, code, cx, cy, size, fill, bg=(0, 0, 0)):
+    """`size` is the icon's nominal width; it is drawn centred on (cx, cy).
+    `bg` is used to knock gaps between overlapping shapes, which a one-colour
+    panel otherwise fuses into an unreadable blob."""
+    w = size
+    if code == 0:                                    # clear
+        _sun(draw, cx, cy, w * 0.24, fill)
+    elif code in (1, 2):                             # sun behind cloud
+        _sun(draw, cx + w * 0.22, cy - w * 0.24, w * 0.16, fill)
+        _cloud(draw, cx - w * 0.06, cy + w * 0.14, w * 0.92, bg)   # knockout
+        _cloud(draw, cx - w * 0.06, cy + w * 0.14, w * 0.80, fill)
+    elif code == 3:                                  # overcast
+        _cloud(draw, cx, cy, w * 0.95, fill)
+    elif code in (45, 48):                           # fog
+        _cloud(draw, cx, cy - w * 0.20, w * 0.85, fill)
+        # Clear of the cloud base, or the bars fuse with it into a barcode.
+        for i in range(3):
+            y = cy + w * 0.22 + i * w * 0.15
+            draw.line([cx - w * 0.36, y, cx + w * 0.36, y], fill=fill, width=max(2, int(w * 0.05)))
+    elif code in (51, 53, 55, 56, 57):               # drizzle
+        _cloud(draw, cx, cy - w * 0.14, w * 0.85, fill)
+        _drops(draw, cx, cy + w * 0.22, w, fill, 3, slant=False)
+    elif code in (61, 63, 65, 66, 67, 80, 81, 82):   # rain / showers
+        _cloud(draw, cx, cy - w * 0.14, w * 0.85, fill)
+        _drops(draw, cx, cy + w * 0.20, w, fill, 3)
+    elif code in (71, 73, 75, 77, 85, 86):           # snow
+        _cloud(draw, cx, cy - w * 0.14, w * 0.85, fill)
+        _flakes(draw, cx, cy + w * 0.18, w, fill)
+    elif code in (95, 96, 99):                       # thunderstorm
+        _cloud(draw, cx, cy - w * 0.16, w * 0.85, fill)
+        b = w * 0.20
+        draw.polygon([(cx + b * 0.15, cy + w * 0.10), (cx - b * 0.55, cy + w * 0.46),
+                      (cx - b * 0.05, cy + w * 0.44), (cx - b * 0.35, cy + w * 0.80),
+                      (cx + b * 0.65, cy + w * 0.34), (cx + b * 0.10, cy + w * 0.36)], fill=fill)
+    else:
+        _cloud(draw, cx, cy, w * 0.95, fill)
+
+
+def render_weather(place, temp, cond, rows, out_name, pal=CLASSIC, code=2):
+    """Mirrors renderWeatherBoard(): the shared header and clock, with a large
+    temperature and condition over two dim detail rows. The body must fit
+    between the header and CLOCK_Y or it collides with the clock."""
+    img = Image.new("RGB", (sx(W), sx(H)), pal["bg"])
+    draw = ImageDraw.Draw(img)
+    draw_header(img, draw, "WEATHER", place, pal)
+
+    draw.text((sx(0), sx(30)), temp, font=f_temp, fill=pal["fg"])
+    tw = draw.textlength(temp, font=f_temp) / SCALE
+    draw.text((sx(tw + 10), sx(40)), cond, font=f_row, fill=pal["fg"])
+
+    # Detail rows in the bold row font at full brightness. They were the dim
+    # secondary colour, which is for the mode tag — here they are real data and
+    # were the hardest thing on the board to read across a room.
+    for i, r in enumerate(rows):
+        draw.text((sx(0), sx(72 + i * 20)), r, font=f_row_bold_sm, fill=pal["fg"])
+
+    # The icon fills the space the text leaves on the right.
+    draw_weather_icon(draw, code, sx(262), sx(68), sx(64), pal["fg"], pal["bg"])
+
+    finish(img, draw, out_name, pal)
+
+
+def bezel_and_save(img, out_name):
+    """The clock has no ticking clock of its own to draw, so it skips finish()."""
+    bez = 40
+    canvas = Image.new("RGB", (sx(W) + bez * 2, sx(H) + bez * 2), (28, 28, 30))
+    ImageDraw.Draw(canvas).rounded_rectangle(
+        [bez - 6, bez - 6, bez + sx(W) + 5, bez + sx(H) + 5],
+        radius=10, outline=(70, 70, 74), width=3)
+    canvas.paste(img, (bez, bez))
+    out = os.path.join(HERE, out_name)
+    canvas.save(out)
+    print(f"  wrote {out_name}")
+
+
 def render_bus(stop, line_filter, arrivals, out_name, pal=CLASSIC):
     render_arrivals(f"BUS {line_filter}" if line_filter else "BUS",
                     stop, arrivals, "No buses due", out_name, pal)
@@ -203,6 +344,12 @@ if __name__ == "__main__":
         {"when": at(23), "line": "RB6", "dest": "Putney Pier",       "eta": eta(23)},
         {"when": at(41), "line": "RB1", "dest": "Barking Riverside", "eta": eta(41)},
     ], "mockup-river.png")
+
+    render_clock("mockup-clock.png")
+
+    render_weather("Motspur Park", "18°", "Partly cloudy",
+                   ["Feels 17°   Wind 12 mph", "High 21°   Low 14°"],
+                   "mockup-weather.png", code=2)
 
     # Edge cases worth being able to eyeball after a layout change.
     render_train([

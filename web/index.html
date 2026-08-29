@@ -47,6 +47,16 @@
   </div>
   <p class="hint" id="hoursSummary"></p>
 
+  <div class="field" id="nightField">
+    <label class="svc-toggle" for="nightClock" style="margin-top:4px">
+      <input type="checkbox" id="nightClock" autocomplete="off" checked>
+      <span><strong>Show a dimmed clock overnight</strong>
+      <span>Instead of going fully dark. It is turned right down and drifts a
+      few pixels now and then, so it stays readable without lighting the room
+      or wearing the panel.</span></span>
+    </label>
+  </div>
+
   <div class="grid-2">
     <div class="field">
       <label for="bright">Brightness <output id="brightOut"></output></label>
@@ -127,6 +137,21 @@
       <label for="riverline">Only one route (optional)</label>
       <input id="riverline" type="text" placeholder="e.g. RB1 — blank shows every route">
     </div>
+  </div>
+  <!-- Weather -->
+  <div class="svc" id="svc-weather" hidden>
+    <h3>Weather</h3>
+    <p class="hint">Current conditions for wherever you picked above — there is
+       nothing else to set. Uses <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>,
+       which like the TfL feeds needs no key.</p>
+    <p class="chosen" id="wxChosen" hidden></p>
+  </div>
+
+  <!-- Big clock -->
+  <div class="svc" id="svc-clock" hidden>
+    <h3>Big clock</h3>
+    <p class="hint">Just the time, filling the screen. Needs nothing configured —
+       the board keeps its clock right over the internet.</p>
   </div>
 </section>
 

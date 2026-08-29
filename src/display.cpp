@@ -96,7 +96,12 @@ struct RowScroll {
 RowScroll s_rowScroll[MAX_DEPARTURES];
 RowScroll s_busScroll[MAX_BUS_ARRIVALS];
 RowScroll s_riverScroll[MAX_RIVER_ARRIVALS];
+RowScroll s_wxScroll;          // the weather condition, if it overflows
 RowScroll s_headerScroll;
+
+// The user's chosen brightness, remembered so the night clock can dim the panel
+// and every other screen can put it back without consulting the config.
+uint8_t s_brightness = BRIGHTNESS;
 
 // All three boards share one layout so they read as the same instrument: a
 // header row naming the mode and the station/stop/pier, then three identical
@@ -262,6 +267,96 @@ void drawClock(int y) {
     spr.print(timeStr);
 }
 
+// --- Weather icons ----------------------------------------------------------
+// Drawn from primitives rather than shipped as bitmaps: no flash cost worth
+// counting, any size, and they take the theme colour for free.
+//
+// The one trick a single-colour panel needs is the knockout. Two overlapping
+// filled shapes in the same colour fuse into an unreadable blob -- "sun behind
+// cloud" comes out looking like a snowman -- so the cloud is drawn once
+// oversized in the background colour to cut a clean gap, then again at true
+// size in the foreground.
+
+void drawSun(int cx, int cy, int r) {
+    spr.fillCircle(cx, cy, r, AMBER);
+    for (int i = 0; i < 8; ++i) {
+        float a = i * (float)M_PI / 4.0f;
+        int x0 = cx + (int)(cosf(a) * r * 1.45f), y0 = cy + (int)(sinf(a) * r * 1.45f);
+        int x1 = cx + (int)(cosf(a) * r * 2.05f), y1 = cy + (int)(sinf(a) * r * 2.05f);
+        spr.drawWideLine(x0, y0, x1, y1, r * 0.30f, AMBER);
+    }
+}
+
+void drawCloud(int cx, int cy, int w, uint16_t colour) {
+    int r = w * 30 / 100;
+    spr.fillCircle(cx - w * 38 / 100, cy + r * 3 / 10, r * 8 / 10, colour);
+    spr.fillCircle(cx - w * 2 / 100,  cy - r / 20,     r,          colour);
+    spr.fillCircle(cx + w * 30 / 100, cy + r * 4 / 10, r * 75 / 100, colour);
+    spr.fillRoundRect(cx - w * 48 / 100, cy + r * 15 / 100,
+                      w * 96 / 100, r * 80 / 100, r * 4 / 10, colour);
+}
+
+void drawDrops(int cx, int cy, int w, bool slanted) {
+    for (int i = -1; i <= 1; ++i) {
+        int x = cx + i * w * 26 / 100;
+        int dx = slanted ? w * 10 / 100 : 0;
+        spr.drawWideLine(x + dx, cy, x - dx, cy + w * 30 / 100, w * 0.055f, AMBER);
+    }
+}
+
+// `w` is the icon's nominal width; it is drawn centred on (cx, cy).
+void drawWeatherIcon(int code, int cx, int cy, int w) {
+    switch (code) {
+        case 0:                                        // clear
+            drawSun(cx, cy, w * 24 / 100);
+            break;
+        case 1: case 2:                                // sun behind cloud
+            drawSun(cx + w * 22 / 100, cy - w * 24 / 100, w * 16 / 100);
+            drawCloud(cx - w * 6 / 100, cy + w * 14 / 100, w * 92 / 100, BLACK);
+            drawCloud(cx - w * 6 / 100, cy + w * 14 / 100, w * 80 / 100, AMBER);
+            break;
+        case 45: case 48:                              // fog
+            drawCloud(cx, cy - w * 20 / 100, w * 85 / 100, AMBER);
+            // Clear of the cloud base, or the bars fuse with it into a barcode.
+            for (int i = 0; i < 3; ++i) {
+                int y = cy + w * 22 / 100 + i * w * 15 / 100;
+                int th = w * 5 / 100 < 2 ? 2 : w * 5 / 100;
+                spr.fillRect(cx - w * 36 / 100, y, w * 72 / 100, th, AMBER);
+            }
+            break;
+        case 51: case 53: case 55: case 56: case 57:   // drizzle: straight
+            drawCloud(cx, cy - w * 14 / 100, w * 85 / 100, AMBER);
+            drawDrops(cx, cy + w * 22 / 100, w, false);
+            break;
+        case 61: case 63: case 65: case 66: case 67:
+        case 80: case 81: case 82:                     // rain: slanted, so the
+            drawCloud(cx, cy - w * 14 / 100, w * 85 / 100, AMBER);   // two are
+            drawDrops(cx, cy + w * 20 / 100, w, true);               // telling apart
+            break;
+        case 71: case 73: case 75: case 77: case 85: case 86:   // snow
+            drawCloud(cx, cy - w * 14 / 100, w * 85 / 100, AMBER);
+            for (int i = -1; i <= 1; ++i) {
+                spr.fillCircle(cx + i * w * 26 / 100, cy + w * 28 / 100,
+                               w * 55 / 1000, AMBER);
+            }
+            break;
+        case 95: case 96: case 99: {                   // thunderstorm
+            drawCloud(cx, cy - w * 16 / 100, w * 85 / 100, AMBER);
+            int b = w * 20 / 100;
+            spr.fillTriangle(cx + b * 15 / 100, cy + w * 10 / 100,
+                             cx - b * 55 / 100, cy + w * 46 / 100,
+                             cx + b * 10 / 100, cy + w * 36 / 100, AMBER);
+            spr.fillTriangle(cx - b * 5 / 100,  cy + w * 44 / 100,
+                             cx - b * 35 / 100, cy + w * 80 / 100,
+                             cx + b * 65 / 100, cy + w * 34 / 100, AMBER);
+            break;
+        }
+        default:                                       // overcast, and anything
+            drawCloud(cx, cy, w * 95 / 100, AMBER);    // we do not recognise
+            break;
+    }
+}
+
 // Stale-data indicator: the feed is failing but the last good data is still on
 // screen. Every board draws it the same way, in the same corner.
 void drawStaleIndicator(int errCount) {
@@ -310,6 +405,7 @@ void drawArrivalsBoard(const String& tag, const String& name,
 namespace ui {
 
 void begin(uint8_t brightness) {
+    s_brightness = brightness;
     // The T-Display-S3 gates the panel power on GPIO15 — must be HIGH.
     pinMode(15, OUTPUT);
     digitalWrite(15, HIGH);
@@ -325,6 +421,7 @@ void begin(uint8_t brightness) {
 }
 
 void setBrightness(uint8_t brightness) {
+    s_brightness = brightness;
     lcd.setBrightness(brightness);
 }
 
@@ -423,6 +520,8 @@ void resetScroll() {
     for (auto& r : s_rowScroll) { r.text = ""; r.offset = 0; }
     for (auto& r : s_busScroll) { r.text = ""; r.offset = 0; }
     for (auto& r : s_riverScroll) { r.text = ""; r.offset = 0; }
+    s_wxScroll.text = "";
+    s_wxScroll.offset = 0;
     s_headerScroll.text = "";
     s_headerScroll.offset = 0;
 }
@@ -464,6 +563,74 @@ void renderError(const String& title, const String& detail) {
     const char* hint = "Re-run the installer to fix";
     spr.setCursor((W - spr.textWidth(hint)) / 2, 116);
     spr.print(hint);
+    spr.pushSprite(0, 0);
+}
+
+void renderClock(bool night, int driftX, int driftY) {
+    spr.fillScreen(BLACK);
+
+    time_t now = time(nullptr);
+    struct tm tm;
+    localtime_r(&now, &tm);
+    char buf[8];
+    strftime(buf, sizeof(buf), "%H:%M", &tm);
+
+    spr.setFont(&Clock_Bold_104);
+    spr.setTextColor(AMBER, BLACK);
+    int tw = spr.textWidth(buf);
+    int th = spr.fontHeight();
+    spr.setCursor((W - tw) / 2 + driftX, (H - th) / 2 + driftY);
+    spr.print(buf);
+
+    // The flip-clock split. Drawn in the background colour rather than a border
+    // colour so it reads as a seam in the digits, which is what a real one is.
+    spr.fillRect(0, H / 2 + driftY - 1, W, 3, BLACK);
+
+    spr.pushSprite(0, 0);
+    lcd.setBrightness(night ? NIGHT_BRIGHTNESS : s_brightness);
+}
+
+void renderWeatherBoard(const Weather& wx, const String& place, int errCount) {
+    spr.fillScreen(BLACK);
+    drawHeader("WEATHER", place);
+
+    // The body has to live between the header and the clock at CLOCK_Y, so the
+    // temperature is sized to leave room for two detail rows underneath.
+    spr.setFont(&fonts::FreeSansBold24pt7b);
+    spr.setTextColor(AMBER, BLACK);
+    String temp = wx.temp.length() ? wx.temp + "\xB0" : "--";
+    spr.setCursor(0, 30);
+    spr.print(temp);
+    int tw = spr.textWidth(temp);
+
+    if (wx.condition.length()) {
+        spr.setFont(ROW_FONT);
+        drawScrolling(s_wxScroll, wx.condition, tw + 10, 40,
+                      W - tw - 14, spr.fontHeight());
+    }
+
+    // Full brightness and the bold face: DIM is for the mode tag, and using
+    // it here made the actual readings the hardest thing on the board to read.
+    spr.setFont(&fonts::FreeSansBold9pt7b);
+    spr.setTextColor(AMBER, BLACK);
+    if (wx.feels.length() || wx.wind.length()) {
+        String row = "";
+        if (wx.feels.length()) row += "Feels " + wx.feels + "\xB0";
+        if (wx.wind.length()) row += (row.length() ? "   " : "") + String("Wind ") + wx.wind + " mph";
+        spr.setCursor(0, 72);
+        spr.print(row);
+    }
+    if (wx.high.length() && wx.low.length()) {
+        spr.setCursor(0, 92);
+        spr.print("High " + wx.high + "\xB0   Low " + wx.low + "\xB0");
+    }
+
+
+    // The icon fills the space the text leaves on the right.
+    if (wx.code >= 0) drawWeatherIcon(wx.code, 262, 68, 64);
+
+    drawClock(CLOCK_Y);
+    drawStaleIndicator(errCount);
     spr.pushSprite(0, 0);
 }
 

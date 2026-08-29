@@ -13,7 +13,9 @@ export const KEYS = [
   'ssid', 'pass', 'key', 'dep', 'dest', 'plat', 'tz',
   'bus', 'busline', 'river', 'riverline', 'rivername', 'mode',
   'bstart', 'bend', 'bright', 'refr',
-  'colfg', 'coldim', 'colwarn', 'colbg', 'dwtrain', 'dwbus', 'dwriver',
+  'colfg', 'coldim', 'colwarn', 'colbg',
+  'dwtrain', 'dwbus', 'dwriver', 'dwclock', 'dwwx',
+  'wlat', 'wlon', 'wname', 'nmode',
 ];
 
 // Port of installer.py's SERVICES. Order matters: it is the order the board
@@ -22,6 +24,8 @@ export const SERVICES = [
   { id: 'train', label: 'Trains', note: 'UK-wide, National Rail' },
   { id: 'bus', label: 'London buses', note: 'TfL, London only' },
   { id: 'river', label: 'River boats', note: 'Uber Boat by Thames Clippers + Woolwich Ferry' },
+  { id: 'weather', label: 'Weather', note: 'For wherever you picked above — no extra setup' },
+  { id: 'clock', label: 'Big clock', note: 'The time, filling the screen' },
 ];
 
 // Port of installer.py's parse_mode. Boards flashed before the river screen
@@ -95,7 +99,11 @@ export function defaultConfig() {
     bright: 180, refr: 60,
     theme: 'amber',
     colours: { ...THEMES.amber },
-    dwtrain: 30, dwbus: 15, dwriver: 15,
+    dwtrain: 30, dwbus: 15, dwriver: 15, dwclock: 10, dwwx: 15,
+    // Weather position is filled in from whichever stop the user picks, so it
+    // is never asked for directly.
+    wxLat: null, wxLon: null, wxName: '',
+    nightClock: true,      // show a dimmed clock during blank hours
   };
 }
 
@@ -112,7 +120,10 @@ export function toDeviceConfig(ui) {
     if (s === 'bus') return !!ui.bus;
     if (s === 'river') return !!ui.river;
     if (s === 'train') return !!ui.dep;
-    return true;
+    // Weather needs somewhere to be the weather *for*, which comes from the
+    // stop the user already chose rather than a question of its own.
+    if (s === 'weather') return ui.wxLat !== null && ui.wxLon !== null;
+    return true;      // the clock needs nothing
   });
 
   const blanking = ui.onHour >= 0 && ui.offHour >= 0 && ui.onHour !== ui.offHour;
@@ -143,6 +154,13 @@ export function toDeviceConfig(ui) {
     dwtrain: ui.dwtrain,
     dwbus: ui.dwbus,
     dwriver: ui.dwriver,
+    dwclock: ui.dwclock,
+    dwwx: ui.dwwx,
+    // Degrees x100000: NVS has no float type, and this keeps ~1m of precision.
+    wlat: pruned.includes('weather') ? Math.round(ui.wxLat * 100000) : -2147483648,
+    wlon: pruned.includes('weather') ? Math.round(ui.wxLon * 100000) : -2147483648,
+    wname: pruned.includes('weather') ? (ui.wxName || '') : '',
+    nmode: ui.nightClock ? 1 : 0,
   };
 }
 

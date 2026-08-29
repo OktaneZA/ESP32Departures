@@ -87,6 +87,10 @@ export async function stopsNear(lat, lon, radiusM) {
       name: plain(name || ''),
       towards: plain(towards || ''),
       indicator: indicator || '',
+      // The stop's own position, kept so the weather screen can be pointed at
+      // it without asking the user for a location twice.
+      lat: Number(slat),
+      lon: Number(slon),
       distance: haversineM(lat, lon, Number(slat), Number(slon)),
     });
   }
@@ -195,7 +199,13 @@ export async function riverPiers() {
     const tag = line === 'woolwich-ferry' ? 'WF' : line.toUpperCase();
     for (const sp of data) {
       if (sp.stopType !== 'NaptanFerryPort' || !sp.id) continue;
-      const e = piers.get(sp.id) || { id: sp.id, name: plain(sp.commonName || sp.id), lines: [] };
+      const e = piers.get(sp.id) || {
+        id: sp.id,
+        name: plain(sp.commonName || sp.id),
+        lat: sp.lat != null ? Number(sp.lat) : null,
+        lon: sp.lon != null ? Number(sp.lon) : null,
+        lines: [],
+      };
       if (!e.lines.includes(tag)) e.lines.push(tag);
       piers.set(sp.id, e);
     }

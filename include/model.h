@@ -28,3 +28,17 @@ struct BusArrival {
 // than duplicating it. TfL gives river predictions as seconds-to-station, so
 // `etaSeconds` means the same thing here as it does for buses.
 using RiverArrival = BusArrival;
+
+// Current conditions for the weather screen, already formatted for display.
+// Temperatures are whole degrees because the row font is wide and a tenth of a
+// degree is noise at a glance; the "feels like" is the one people actually act
+// on, so it keeps its own line rather than being folded into the headline.
+struct Weather {
+    int     code = -1;   // raw WMO code, for choosing the icon
+    String  temp;        // headline temperature, e.g. "18"
+    String  condition;   // plain words from the WMO code, e.g. "Light rain"
+    String  feels;       // apparent temperature, e.g. "17"
+    String  wind;        // wind speed in mph, e.g. "12"
+    String  high;        // today's maximum
+    String  low;         // today's minimum
+};

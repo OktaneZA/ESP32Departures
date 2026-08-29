@@ -34,6 +34,20 @@ struct Config {
     int    dwell_train = -1;   // seconds the train screen holds (-1 = default)
     int    dwell_bus   = -1;   // seconds the bus screen holds
     int    dwell_river = -1;   // seconds the river screen holds
+    int    dwell_clock = -1;   // seconds the big-clock screen holds
+    int    dwell_wx    = -1;   // seconds the weather screen holds
+
+    // Weather. Position is stored as degrees x 100000 because NVS has no float
+    // type and the installer already knows the coordinates of whatever stop was
+    // chosen, so nothing extra is asked of the user.
+    int    wx_lat = INT32_MIN;   // INT32_MIN = not set
+    int    wx_lon = INT32_MIN;
+    String wx_name;              // place label, as river_name is for the pier
+
+    // What the screen does during blank hours: 0 = off entirely, 1 = dimmed
+    // clock. Unset means the clock, which is the one setting that deliberately
+    // changes behaviour on upgrade — a dark screen is strictly less useful.
+    int    night_mode = -1;
 
     // A stored setting wins only when it was actually set; otherwise the
     // compile-time default applies. Colours are 16-bit, so any value outside
@@ -64,6 +78,8 @@ struct Config {
     bool wants_train() const { return wants("train"); }
     bool wants_bus() const { return wants("bus"); }
     bool wants_river() const { return wants("river"); }
+    bool wants_clock() const { return wants("clock"); }
+    bool wants_weather() const { return wants("weather"); }
 
     // A service only actually runs when its settings are present as well as
     // wanted, so switching one off keeps its settings stored for switching back.
@@ -76,11 +92,26 @@ struct Config {
     bool bus_enabled() const { return wants_bus() && bus_stop.length(); }
     bool river_enabled() const { return wants_river() && river_pier.length(); }
 
+    // The clock needs nothing but the wish for it.
+    bool clock_enabled() const { return wants_clock(); }
+
+    bool weather_enabled() const {
+        return wants_weather() && wx_lat != INT32_MIN && wx_lon != INT32_MIN;
+    }
+
+    float wx_latitude() const { return wx_lat / 100000.0f; }
+    float wx_longitude() const { return wx_lon / 100000.0f; }
+
+    // Blank hours show the dimmed clock unless explicitly told to go dark.
+    bool night_clock() const { return night_mode != 0; }
+
     // Usable once there is WiFi and at least one service to show. A river-only
-    // board is fully provisioned with no API key and no station at all.
+    // board is fully provisioned with no API key and no station at all, and a
+    // clock-only board needs nothing but the WiFi it syncs its time over.
     bool provisioned() const {
         return wifi_ssid.length() &&
-               (train_enabled() || bus_enabled() || river_enabled());
+               (train_enabled() || bus_enabled() || river_enabled() ||
+                clock_enabled() || weather_enabled());
     }
 };
 

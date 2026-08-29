@@ -43,6 +43,23 @@ void renderBusBoard(const std::vector<BusArrival>& arrivals, const String& stopN
 void renderRiverBoard(const std::vector<RiverArrival>& arrivals, const String& pierName,
                       const String& lineFilter, uint32_t sinceFetchMs, int errCount);
 
+// Render one full frame of the big-clock screen: HH:MM filling the panel in the
+// provisioned palette.
+//
+// `night` is for blank hours — it drops the backlight to NIGHT_BRIGHTNESS so the
+// board is readable in the dark without lighting the room, and the caller is
+// expected to restore the brightness on the way out.
+//
+// `drift` nudges the digits a few pixels from centre. Blank hours run for eight
+// hours with three of the four digits unchanging, so moving it occasionally
+// keeps any one pixel from being lit all night.
+void renderClock(bool night, int driftX, int driftY);
+
+// Render one full frame of the weather screen. Shares the header and clock with
+// every other board; the body is a large temperature and condition over two dim
+// detail rows.
+void renderWeatherBoard(const Weather& wx, const String& place, int errCount);
+
 // Reset the horizontal marquees so a screen that has just come back into view
 // starts its long names from the beginning rather than mid-scroll.
 void resetScroll();

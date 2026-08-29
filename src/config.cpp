@@ -12,6 +12,7 @@
 //
 // Keys: ssid pass key dep dest plat tz bus busline river riverline rivername mode
 //       bstart bend bright refr colfg coldim colwarn colbg dwtrain dwbus dwriver
+//       dwclock dwwx wlat wlon wname nmode
 
 #include "config.h"
 #include "app_config.h"   // compile-time defaults
@@ -57,6 +58,12 @@ void load_from_nvs(Config& c) {
     c.dwell_train = prefs.getInt("dwtrain", -1);
     c.dwell_bus   = prefs.getInt("dwbus",  -1);
     c.dwell_river = prefs.getInt("dwriver", -1);
+    c.dwell_clock = prefs.getInt("dwclock", -1);
+    c.dwell_wx    = prefs.getInt("dwwx",   -1);
+    c.wx_lat      = prefs.getInt("wlat",   INT32_MIN);
+    c.wx_lon      = prefs.getInt("wlon",   INT32_MIN);
+    c.wx_name     = prefs.getString("wname", "");
+    c.night_mode  = prefs.getInt("nmode",  -1);
     prefs.end();
 }
 
@@ -91,6 +98,12 @@ void stage_kv(const String& kv) {
     else if (k == "dwtrain") g_stage.dwell_train = v.toInt();
     else if (k == "dwbus")  g_stage.dwell_bus   = v.toInt();
     else if (k == "dwriver") g_stage.dwell_river = v.toInt();
+    else if (k == "dwclock") g_stage.dwell_clock = v.toInt();
+    else if (k == "dwwx")   g_stage.dwell_wx    = v.toInt();
+    else if (k == "wlat")   g_stage.wx_lat      = v.toInt();
+    else if (k == "wlon")   g_stage.wx_lon      = v.toInt();
+    else if (k == "wname")  g_stage.wx_name     = v;
+    else if (k == "nmode")  g_stage.night_mode  = v.toInt();
     else { Serial.print("ERR key "); Serial.println(k); return; }
 
     Serial.print("ACK "); Serial.println(k);
@@ -123,6 +136,12 @@ void commit_and_reboot() {
     prefs.putInt("dwtrain", g_stage.dwell_train);
     prefs.putInt("dwbus",  g_stage.dwell_bus);
     prefs.putInt("dwriver", g_stage.dwell_river);
+    prefs.putInt("dwclock", g_stage.dwell_clock);
+    prefs.putInt("dwwx",   g_stage.dwell_wx);
+    prefs.putInt("wlat",   g_stage.wx_lat);
+    prefs.putInt("wlon",   g_stage.wx_lon);
+    prefs.putString("wname", g_stage.wx_name);
+    prefs.putInt("nmode",  g_stage.night_mode);
     prefs.end();
     Serial.println("SAVED");
     Serial.flush();
@@ -206,6 +225,12 @@ void handle_line(String line) {
         Serial.print("dwtrain="); Serial.println(g_cfg.dwell_train);
         Serial.print("dwbus=");  Serial.println(g_cfg.dwell_bus);
         Serial.print("dwriver="); Serial.println(g_cfg.dwell_river);
+        Serial.print("dwclock="); Serial.println(g_cfg.dwell_clock);
+        Serial.print("dwwx=");   Serial.println(g_cfg.dwell_wx);
+        Serial.print("wlat=");   Serial.println(g_cfg.wx_lat);
+        Serial.print("wlon=");   Serial.println(g_cfg.wx_lon);
+        Serial.print("wname=");  Serial.println(g_cfg.wx_name);
+        Serial.print("nmode=");  Serial.println(g_cfg.night_mode);
         Serial.print("wifi=");   Serial.println(WiFi.status() == WL_CONNECTED ? "up" : "down");
         Serial.print("prov=");   Serial.println(g_cfg.provisioned() ? 1 : 0);
         Serial.println("END");

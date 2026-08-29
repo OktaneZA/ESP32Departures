@@ -25,6 +25,7 @@
 #include "rail_api.h"
 #include "bus_api.h"
 #include "river_api.h"
+#include "weather_api.h"
 
 // ---------------------------------------------------------------------------
 // Shared state (fetch task writes, render loop reads) — guarded by g_mutex.
@@ -54,6 +55,13 @@ static bool     g_badPier = false;      // pier rejected by TfL (HTTP 404)
 static bool     g_riverHaveData = false;
 static uint32_t g_riverFetchedMs = 0;
 static uint32_t g_riverEpoch = 0;
+
+// Weather screen state (only touched when a position is configured).
+static Weather  g_wx;
+static int      g_wxErrCount = 0;
+static bool     g_badWxLocation = false;
+static bool     g_wxHaveData = false;
+static uint32_t g_wxEpoch = 0;
 
 // ---------------------------------------------------------------------------
 // WiFi + time
@@ -222,11 +230,49 @@ static uint32_t fetchRiverOnce() {
     return wait;
 }
 
+// Poll Open-Meteo once and publish the result. Returns how long to wait.
+static uint32_t fetchWeatherOnce() {
+    Weather wx;
+    weather::Fetch st = weather::fetchCurrent(cfg::get(), wx);
+    bool ok = (st == weather::Fetch::Ok);
+
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    if (ok) {
+        g_wx = wx;
+        g_wxErrCount = 0;
+        g_badWxLocation = false;
+        g_wxHaveData = true;
+    } else if (st == weather::Fetch::BadLocation) {
+        g_badWxLocation = true;
+        g_wxHaveData = false;
+        g_wxErrCount = 0;
+    } else {
+        g_wxErrCount++;          // keep the last reading on screen (stale)
+        g_badWxLocation = false;
+    }
+    g_wxEpoch++;
+    int fails = g_wxErrCount;
+    xSemaphoreGive(g_mutex);
+
+    if (ok) {
+        Serial.printf("[wx] ok: %s deg, %s\n", wx.temp.c_str(), wx.condition.c_str());
+        return WEATHER_REFRESH_SECONDS * 1000UL;
+    }
+    if (st == weather::Fetch::BadLocation) {
+        Serial.println("[wx] coordinates rejected - weather screen disabled until reconfigured");
+        return 300000;
+    }
+    uint32_t wait = backoffMs(fails);
+    Serial.printf("[wx] failed (%d) - retry in %us\n", fails, wait / 1000);
+    return wait;
+}
+
 static void fetchTask(void*) {
     // Signed deadline comparisons, so the scheduler survives millis() wrapping.
     uint32_t nextTrain = millis();
     uint32_t nextBus = millis();
     uint32_t nextRiver = millis();
+    uint32_t nextWx = millis();
 
     for (;;) {
         if (WiFi.status() != WL_CONNECTED) connectWiFi();
@@ -239,6 +285,9 @@ static void fetchTask(void*) {
         }
         if (cfg::get().river_enabled() && (int32_t)(millis() - nextRiver) >= 0) {
             nextRiver = millis() + fetchRiverOnce();
+        }
+        if (cfg::get().weather_enabled() && (int32_t)(millis() - nextWx) >= 0) {
+            nextWx = millis() + fetchWeatherOnce();
         }
         vTaskDelay(pdMS_TO_TICKS(500));
     }
@@ -257,6 +306,39 @@ static bool isBlankHour() {
         return h >= c.blank_start && h < c.blank_end;
     return h >= c.blank_start || h < c.blank_end;   // wraps past midnight
 }
+// ---------------------------------------------------------------------------
+// The two front buttons
+//
+// Both are active-low. BUTTON_1 is the BOOT pin, which has an external pull-up
+// and is only special while the chip is resetting; at runtime it is an ordinary
+// input. BUTTON_2 needs the internal pull-up enabling.
+//
+// Named for what they do rather than where they sit: in this rotation GPIO0 is
+// the lower of the two and GPIO14 the upper, which is the opposite of what the
+// pin numbering suggests.
+// ---------------------------------------------------------------------------
+constexpr uint8_t PIN_BTN_CLOCK = BUTTON_1;   // GPIO0  - hold the clock on screen
+constexpr uint8_t PIN_BTN_NEXT  = BUTTON_2;   // GPIO14 - step to the next panel
+
+constexpr uint32_t BTN_DEBOUNCE_MS = 40;
+
+// Returns true once per press, on the release-to-press edge. Debounced by
+// requiring the level to have been stable for BTN_DEBOUNCE_MS: these are bare
+// tactile switches, and without it a single push registers several times.
+static bool pressed(uint8_t pin, bool& lastStable, uint32_t& changedAt) {
+    bool down = (digitalRead(pin) == LOW);
+    if (down != lastStable) {
+        if (millis() - changedAt >= BTN_DEBOUNCE_MS) {
+            lastStable = down;
+            changedAt = millis();
+            return down;            // edge, and it settled: a real press
+        }
+    } else {
+        changedAt = millis();
+    }
+    return false;
+}
+
 
 // ---------------------------------------------------------------------------
 // Setup / loop
@@ -271,6 +353,14 @@ void setup() {
     Serial.printf("[boot] provisioned=%d mode=%s station=%s bus=%s pier=%s\n",
                   c.provisioned(), c.mode.length() ? c.mode.c_str() : "train,bus",
                   c.dep_crs.c_str(), c.bus_stop.c_str(), c.river_pier.c_str());
+    Serial.printf("[boot] screens: train=%d bus=%d river=%d weather=%d clock=%d\n",
+                  c.train_enabled(), c.bus_enabled(), c.river_enabled(),
+                  c.weather_enabled(), c.clock_enabled());
+    Serial.printf("[boot] weather at %d,%d (%s)\n",
+                  c.wx_lat, c.wx_lon, c.wx_name.c_str());
+
+    pinMode(PIN_BTN_CLOCK, INPUT_PULLUP);
+    pinMode(PIN_BTN_NEXT, INPUT_PULLUP);
 
     g_mutex = xSemaphoreCreateMutex();
     ui::begin(c.brightness);
@@ -311,7 +401,7 @@ void setup() {
 // screen to fall back on, the board says what it is waiting for rather than
 // showing an empty departure board for a station that was never configured.
 // ---------------------------------------------------------------------------
-enum class Screen { Train, Bus, River };
+enum class Screen { Train, Bus, River, Clock, Weather };
 
 // How long a screen holds before the rotation moves on. The provisioned value
 // wins when there is one; otherwise the app_config.h default applies, so a board
@@ -327,6 +417,12 @@ static uint32_t dwellMs(Screen s) {
             break;
         case Screen::River:
             seconds = Config::pick(c.dwell_river, RIVER_SCREEN_SECONDS, 3, 300);
+            break;
+        case Screen::Clock:
+            seconds = Config::pick(c.dwell_clock, CLOCK_SCREEN_SECONDS, 3, 300);
+            break;
+        case Screen::Weather:
+            seconds = Config::pick(c.dwell_wx, WEATHER_SCREEN_SECONDS, 3, 300);
             break;
         default:
             seconds = Config::pick(c.dwell_train, TRAIN_SCREEN_SECONDS, 3, 300);
@@ -350,6 +446,11 @@ void loop() {
     static int busErr = 0;
     static bool busReady = false;
     static uint32_t busFetchedMs = 0;
+
+    static uint32_t lastWxEpoch = 0xFFFFFFFF;
+    static Weather wx;
+    static int wxErr = 0;
+    static bool wxReady = false;
 
     static uint32_t lastRiverEpoch = 0xFFFFFFFF;
     static std::vector<RiverArrival> river;
@@ -386,22 +487,71 @@ void loop() {
         riverPier = g_riverPierName;
         lastRiverEpoch = riverEpoch;
     }
+    uint32_t wxEpoch = g_wxEpoch;
+    wxErr = g_wxErrCount;
+    wxReady = g_wxHaveData;
+    if (wxEpoch != lastWxEpoch) {
+        wx = g_wx;
+        lastWxEpoch = wxEpoch;
+    }
     xSemaphoreGive(g_mutex);
 
-    if (isBlankHour()) {
-        ui::renderBlank();
+    const Config& c = cfg::get();
+
+    // Buttons: the top one holds the clock on screen, the bottom one steps to
+    // the next panel. Read every frame so a press is never missed between the
+    // long dwells.
+    static bool clockDown = false, nextDown = false;
+    static uint32_t clockAt = 0, nextAt = 0;
+    static bool clockHold = false;
+    bool stepScreen = false;
+
+    bool clockPress = pressed(PIN_BTN_CLOCK, clockDown, clockAt);
+    bool nextPress = pressed(PIN_BTN_NEXT, nextDown, nextAt);
+
+    if (clockPress) {
+        clockHold = !clockHold;
+        ui::resetScroll();
+    }
+    if (nextPress) {
+        // Stepping to the next panel implies leaving the held clock: the point
+        // of this button is "show me the boards".
+        clockHold = false;
+        stepScreen = true;
+    }
+
+    static uint32_t wokeAt = 0;
+    if (clockPress || nextPress) wokeAt = millis();
+    bool awake = wokeAt && (millis() - wokeAt < NIGHT_WAKE_SECONDS * 1000UL);
+
+    if (isBlankHour() && !awake) {
+        if (c.night_clock()) {
+            // Nudge the digits every NIGHT_DRIFT_SECONDS so no pixel is lit for
+            // the whole night. Four positions on a slow rotation is enough —
+            // the point is that nothing stays put, not that it wanders.
+            time_t now = time(nullptr);
+            int step = (int)((now / NIGHT_DRIFT_SECONDS) & 3);
+            int dx = (step == 1) ? NIGHT_DRIFT_PX : (step == 3) ? -NIGHT_DRIFT_PX : 0;
+            int dy = (step == 0) ? -NIGHT_DRIFT_PX / 2 : (step == 2) ? NIGHT_DRIFT_PX / 2 : 0;
+            ui::renderClock(true, dx, dy);
+        } else {
+            ui::renderBlank();
+        }
         delay(1000);
         return;
     }
 
     // Which screens are in the rotation this frame, in a fixed order so the
     // cycle stays predictable as feeds come and go.
-    const Config& c = cfg::get();
-    Screen active[3];
+    Screen active[5];
     int nActive = 0;
-    if (c.train_enabled())              active[nActive++] = Screen::Train;
-    if (c.bus_enabled() && busReady)    active[nActive++] = Screen::Bus;
+    if (c.train_enabled())               active[nActive++] = Screen::Train;
+    if (c.bus_enabled() && busReady)     active[nActive++] = Screen::Bus;
     if (c.river_enabled() && riverReady) active[nActive++] = Screen::River;
+    if (c.weather_enabled() && wxReady)  active[nActive++] = Screen::Weather;
+    // The clock needs no feed, so unlike the others it is ready the moment it
+    // is asked for — and it is what a board with nothing else shows.
+    if (c.clock_enabled())               active[nActive++] = Screen::Clock;
 
     static Screen screen = Screen::Train;
     static uint32_t screenSince = 0;
@@ -420,6 +570,13 @@ void loop() {
         screen = active[0];
         screenSince = millis();
         ui::resetScroll();
+    } else if (stepScreen && nActive > 1) {
+        // A button press moves on immediately and restarts the dwell, so the
+        // panel you asked for gets its full time rather than the tail of the
+        // one you interrupted.
+        screen = active[(idx + 1) % nActive];
+        screenSince = millis();
+        ui::resetScroll();
     } else if (nActive == 1) {
         // Only one screen to show — park on it and hold the timer at zero so the
         // first cycle is a full dwell once another one appears.
@@ -430,7 +587,11 @@ void loop() {
         ui::resetScroll();    // long names restart rather than resume mid-scroll
     }
 
-    if (nActive == 0) {
+    // The held clock wins over everything: it is what the button was pressed
+    // for, and it works whether or not the clock is one of the chosen screens.
+    if (clockHold) {
+        ui::renderClock(false, 0, 0);
+    } else if (nActive == 0) {
         // Trains are off and neither TfL feed has answered yet. Report the
         // worse of the two failures, since a board with no screen at all is
         // almost always a network problem rather than a quiet stop.
@@ -447,6 +608,10 @@ void loop() {
         ui::renderBusBoard(bus, busStop, c.bus_line, millis() - busFetchedMs, busErr);
     } else if (screen == Screen::River) {
         ui::renderRiverBoard(river, riverPier, c.river_line, millis() - riverFetchedMs, riverErr);
+    } else if (screen == Screen::Weather) {
+        ui::renderWeatherBoard(wx, c.wx_name.length() ? c.wx_name : String("Weather"), wxErr);
+    } else if (screen == Screen::Clock) {
+        ui::renderClock(false, 0, 0);
     } else if (badStation) {
         ui::renderError("Unknown station", c.dep_crs);
     } else {

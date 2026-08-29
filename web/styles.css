@@ -282,3 +282,13 @@ footer {
 }
 footer p { margin: 6px 0; }
 a { color: var(--accent); }
+
+/* The big-clock preview is a single centred time rather than the shared
+   header-and-rows board, so it gets its own rule. */
+.board.bigclock { align-items: center; justify-content: center; }
+.bc-time {
+  font-size: 34cqw;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}

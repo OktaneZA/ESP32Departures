@@ -342,6 +342,12 @@ setup" having silently lost its WiFi, API key and station.
 | `dwtrain` | No | `-1` | Seconds the train screen holds (−1 = `TRAIN_SCREEN_SECONDS`) |
 | `dwbus` | No | `-1` | Seconds the bus screen holds |
 | `dwriver` | No | `-1` | Seconds the river screen holds |
+| `dwclock` | No | `-1` | Seconds the big-clock screen holds |
+| `dwwx` | No | `-1` | Seconds the weather screen holds |
+| `wlat` | No | unset | Weather latitude × 100000 (NVS has no float type) |
+| `wlon` | No | unset | Weather longitude × 100000 |
+| `wname` | No | - | Place label for the weather header |
+| `nmode` | No | `-1` | Blank hours: `0` = screen off, otherwise a dimmed clock |
 | `refr` | No | `60` | API poll interval (seconds) |
 
 | ID | Requirement |
@@ -357,6 +363,9 @@ setup" having silently lost its WiFi, API key and station.
 | CFG-09 | `mode` matching is on whole comma-separated tokens, never substrings, so a malformed value cannot switch on a service the user did not choose |
 | CFG-10 | Colours and dwell times default to `-1` meaning **not set**, and `Config::pick()` falls back to the `app_config.h` value. A board provisioned before these existed therefore looks and behaves exactly as it did — the same mechanism `rivername` uses (RIV-13) |
 | CFG-11 | Out-of-range values are treated as unset rather than applied: a colour outside 0–0xFFFF cannot be drawn, and dwell times are clamped to 3–300s so a stored value can never strobe the board or freeze a screen |
+| CFG-12 | The weather position is stored as degrees × 100000 in two ints. NVS has no float type, and this keeps roughly a metre of precision — far more than a weather forecast resolves to |
+| CFG-13 | `nmode` is the **one** setting whose unset default changes existing behaviour: a board upgrading with no `nmode` shows the dimmed night clock rather than going dark. Every other setting follows CFG-10 and keeps its old behaviour; this one is the point of the change, and a dark screen is strictly less useful than a dim clock |
+| CFG-14 | A clock-only board is fully provisioned with no feed at all — the clock needs only WiFi, and only to set itself |
 
 ---
 
@@ -386,6 +395,15 @@ setup" having silently lost its WiFi, API key and station.
 | DISP-20 | A board with no train screen and no TfL answer yet shows a "Loading arrivals..." splash, not an empty departure board for a station that was never configured |
 | DISP-21 | The river screen shows up to 3 sailings — expected time, route ("RB1"), destination pier, right-aligned countdown — and its countdowns tick down live between polls exactly as the bus screen's do |
 | DISP-22 | If the screen currently displayed drops out of the rotation (its feed starts failing, or the user switches it off), the board moves to the first screen still in it rather than rendering one nothing feeds |
+| DISP-23 | The big clock fills the panel with `HH:MM` in the provisioned palette, with a flip-clock seam drawn in the background colour so it reads as a fold rather than a line laid over the digits |
+| DISP-24 | During blank hours the board shows that clock dimmed to `NIGHT_BRIGHTNESS` rather than going dark, unless `nmode` says otherwise |
+| DISP-25 | The night clock drifts a few pixels every `NIGHT_DRIFT_SECONDS`. Blank hours run for eight hours with three of the four digits unchanging, so moving it keeps any one pixel from being lit all night — cheap insurance even on an IPS panel |
+| DISP-26 | The weather screen reuses the shared header and clock. Its body must fit between the header and `CLOCK_Y`, which is why the temperature is sized down from the mockup's first attempt — it collided with the clock |
+| DISP-27 | The clock screen needs no feed, so unlike the others it joins the rotation the moment it is enabled rather than waiting for data |
+| DISP-28 | The weather screen carries an icon for the current conditions, drawn from primitives rather than shipped as bitmaps: it costs no flash worth counting, scales to any size, and takes the theme colour for free |
+| DISP-29 | Overlapping shapes in a weather icon are separated by a **knockout** — the cloud drawn once oversized in the background colour, then again at true size in the foreground. On a single-colour panel two overlapping filled shapes otherwise fuse, and "sun behind cloud" comes out looking like a snowman |
+| DISP-30 | Drizzle uses straight drops and rain slanted ones, so the two are distinguishable at icon size; fog bars sit clear of the cloud base, which they otherwise fuse with into a barcode |
+| DISP-31 | The weather detail rows use the bold face at full brightness, not `DIM`. That colour is for the mode tag; using it for real readings made them the hardest thing on the board to read |
 
 ---
 
@@ -489,6 +507,50 @@ installer.
 | WEB-10 | Web Serial is feature-detected. Where it is missing (Firefox, Safari, mobile) the page falls back to the downloadable settings file and says so plainly |
 | WEB-11 | After `COMMIT` the board reboots and, being native USB CDC, its port re-enumerates as a new device — invalidating the held handle. The page waits for reconnection and degrades to a plain success message rather than reporting a failure |
 | WEB-12 | A downloaded settings file contains the WiFi password in plain text. The page says so where the download is offered; this is the documented exception to SEC-05 |
+
+---
+
+## 8b. Weather (Open-Meteo, optional)
+
+| Item | Detail |
+|---|---|
+| **API** | [Open-Meteo](https://open-meteo.com) forecast endpoint |
+| **Endpoint** | `https://api.open-meteo.com/v1/forecast` |
+| **Authentication** | **None** — no key and no registration, matching the TfL feeds |
+| **Data returned** | Temperature, apparent temperature, WMO weather code, wind speed, today's max and min |
+| **Response size** | ~700 bytes — by far the smallest of the four feeds |
+| **Freshness** | The response carries `interval: 900`, so polling faster than 15 minutes returns identical data |
+
+| ID | Requirement |
+|---|---|
+| WX-01 | HTTPS enforced; no HTTP fallback |
+| WX-02 | No key is required, so nothing sensitive travels on the request |
+| WX-03 | Units are requested rather than converted: Celsius is the default and `wind_speed_unit=mph` gives the usual British pairing, so the firmware never does arithmetic it could have asked for |
+| WX-04 | Parsed with an ArduinoJson filter, so only the seven numbers drawn are ever allocated |
+| WX-05 | WMO codes are mapped to plain words, grouped rather than exhaustive — the board has one line for it, and nobody plans a morning around drizzle intensity. An unrecognised code shows nothing rather than a guess |
+| WX-06 | Polling is no more frequent than `WEATHER_REFRESH_SECONDS` (900s), matching the feed's own update interval |
+| WX-07 | Coordinates rejected by the feed (HTTP 400) are a configuration error: logged once, retried every 5 minutes, and the weather screen withheld |
+| WX-08 | A failure keeps the last reading on screen and backs off, exactly as the transport feeds do. Weather must never take down a departure board |
+| WX-09 | The location is **never asked for**: it is derived from whatever station, stop or pier the user already chose, all of which carry coordinates |
+| WX-10 | Temperatures are shown as whole degrees — a tenth is noise at a glance, and the row font is wide enough that the extra character costs more than it says |
+
+---
+
+## 8c. Buttons
+
+The board has two tactile buttons on its front edge, `BUTTON_1` (GPIO0, the BOOT
+pin) and `BUTTON_2` (GPIO14).
+
+| ID | Requirement |
+|---|---|
+| BTN-01 | The **clock** button puts the big clock on screen and holds it there; pressing it again resumes the rotation |
+| BTN-02 | The **next** button steps immediately to the next panel and restarts that panel's dwell, so it gets its full time rather than the tail of the one it interrupted |
+| BTN-03 | Stepping implies leaving a held clock: the point of that button is "show me the boards" |
+| BTN-04 | The held clock works whether or not the clock is one of the chosen screens — it is what the button was pressed for |
+| BTN-05 | Presses are debounced by requiring the level to be stable for 40ms. These are bare tactile switches; without it one push registers several times |
+| BTN-06 | Either button wakes the board from night mode to normal brightness for `NIGHT_WAKE_SECONDS`, then it settles back to the dimmed clock on its own. A press that does nothing reads as broken hardware; staying lit because someone brushed it at 3am defeats the point of blank hours |
+| BTN-07 | GPIO0 is physically the **lower** button in this rotation and GPIO14 the upper — the opposite of what the pin numbering suggests. The constants are therefore named for what they do (`PIN_BTN_CLOCK`, `PIN_BTN_NEXT`) rather than where they sit |
+| BTN-08 | GPIO0 is a strapping pin, special only while the chip is resetting; at runtime it is an ordinary input. Both use the internal pull-up and are active-low |
 
 ---
 

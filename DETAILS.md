@@ -147,3 +147,17 @@ ESP32Departures/
   request fails. `web/js/api.js` deliberately sends none.
 - **Station positions** come from NaPTAN (Open Government Licence v3); CRS codes
   are cross-checked against it, with 2,606 of 2,608 confirmed to within 2km.
+- **Weather** comes from [Open-Meteo](https://open-meteo.com), which like the TfL
+  feeds needs no key. Units are requested rather than converted
+  (`wind_speed_unit=mph`), and the location is never asked for — it is taken
+  from whatever stop was chosen, since stations, bus stops and piers all carry
+  coordinates. Conditions arrive as WMO codes, mapped to words in
+  `weather_api.cpp`.
+- **The buttons** are `BUTTON_1` (GPIO0) and `BUTTON_2` (GPIO14), both active-low
+  on the internal pull-up. In this rotation GPIO0 is physically the *lower* one,
+  which is the opposite of what the numbering suggests, so the constants in
+  `main.cpp` are named for their function rather than their position.
+- **The big clock font** is Roboto Bold (Apache-2.0), baked to digits and colon
+  only — 5KB rather than the ~70KB a full ASCII range would cost at that size.
+  See `fonts/README.md`, which also flags that the dot-matrix TTFs arrived
+  without a licence.

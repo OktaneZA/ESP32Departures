@@ -89,6 +89,38 @@
 // Dump the parsed river predictions to Serial once per poll.
 #define RAW_RIVER_DEBUG       0
 
+// -----------------------------------------------------------------------------
+// Big clock and weather — optional extra screens.
+// -----------------------------------------------------------------------------
+
+// How long the full-screen clock holds in the rotation (seconds).
+#define CLOCK_SCREEN_SECONDS  10
+
+// How long the weather screen holds in the rotation (seconds).
+#define WEATHER_SCREEN_SECONDS 15
+
+// How often to poll Open-Meteo (seconds). The feed's own update interval is
+// 900s, so polling faster returns identical data.
+#define WEATHER_REFRESH_SECONDS 900
+
+// Backlight brightness during blank hours when the night clock is showing.
+// Low enough not to light a bedroom, high enough to read across one.
+#define NIGHT_BRIGHTNESS      12
+
+// How far the night clock drifts from centre, in pixels, and how often it moves.
+// Nothing on an IPS panel burns in quickly, but a clock is on for eight hours a
+// night with three of its four digits unchanging, so it is cheap insurance.
+#define NIGHT_DRIFT_PX        14
+#define NIGHT_DRIFT_SECONDS   60
+
+// How long a button press wakes the board from night mode before it settles
+// back to the dimmed clock. Long enough to read a departure board, short enough
+// that brushing it at 3am does not leave the room lit.
+#define NIGHT_WAKE_SECONDS    15
+
+// Dump the parsed weather to Serial once per poll (mirrors RAW_JSON_DEBUG).
+#define RAW_WEATHER_DEBUG     0
+
 // Screen blank hours (24h clock). Blanks the display between START and END to
 // avoid burn-in / light at night. Set both to -1 to disable.
 // Example: START=1, END=5 blanks the board 01:00–05:00.

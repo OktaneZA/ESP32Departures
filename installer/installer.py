@@ -32,6 +32,19 @@ FLASH_LAYOUT = [
 ]
 ESPRESSIF_VID = 0x303A
 
+# Every key the firmware's provisioning protocol accepts, in the order it is
+# sent. Defined once because it is used in two places -- sending settings to the
+# board, and reading a config file -- and keeping two copies in step by hand has
+# already dropped settings on the floor twice.
+CONFIG_KEYS = (
+    "ssid", "pass", "key", "dep", "dest", "plat", "tz",
+    "bus", "busline", "river", "riverline", "rivername", "mode",
+    "bstart", "bend", "bright", "refr",
+    "colfg", "coldim", "colwarn", "colbg",
+    "dwtrain", "dwbus", "dwriver", "dwclock", "dwwx",
+    "wlat", "wlon", "wname", "nmode",
+)
+
 
 def resource_path(rel):
     """Path to a bundled resource, whether running as a script or PyInstaller exe."""
@@ -676,11 +689,7 @@ def provision(port, cfg, wait_boot=20.0):
             print("  ! board did not respond (no PONG)")
             return False
 
-        for key in ("ssid", "pass", "key", "dep", "dest", "plat", "tz",
-                    "bus", "busline", "river", "riverline", "rivername",
-                    "mode", "bstart", "bend", "bright", "refr",
-                    "colfg", "coldim", "colwarn", "colbg",
-                    "dwtrain", "dwbus", "dwriver"):
+        for key in CONFIG_KEYS:
             # None means "leave whatever the board already has". The firmware
             # stages a COMMIT on top of its current config, so simply not
             # sending a key preserves it.
@@ -1058,12 +1067,7 @@ def run_auto(path):
         d = json.load(f)
     # A key absent from the JSON means "leave whatever the board already has",
     # matching the interactive wizard. Pass an explicit "" to clear a setting.
-    cfg = {k: d.get(k) for k in
-           ("ssid", "pass", "key", "dep", "dest", "plat", "tz",
-            "bus", "busline", "river", "riverline", "rivername",
-            "mode", "bstart", "bend", "bright", "refr",
-            "colfg", "coldim", "colwarn", "colbg",
-            "dwtrain", "dwbus", "dwriver")}
+    cfg = {k: d.get(k) for k in CONFIG_KEYS}
     if cfg["tz"] == "":
         cfg["tz"] = detect_tz()
     port = d.get("port") or pick_port()
