@@ -462,6 +462,8 @@ PyInstaller) that flashes the firmware and provisions the board.
 | INST-26 | A board that has never been configured defaults to **on 06:00–22:00** rather than never blanking; an already-configured board keeps its own hours as the default, including an explicit "never blank" |
 | INST-27 | A service is opted into **once**, in Part 2. The stop and pier sections ask *which*, never *whether* — and a service chosen there but then left without a stop or pier is pruned from `mode`, so the board is never enabled for a screen with nothing behind it |
 | INST-28 | Pier names are folded to ASCII before being shown or stored: TfL returns "St Mary's Wandsworth Pier" with a U+2019 quote, which the board's font cannot draw |
+| INST-29 | The exe is built by CI on a tag and published as a GitHub Release, with a SHA-256 beside it. The firmware is **compiled from that tag's source** in the same job rather than taken from whatever is committed in `installer/firmware/`, so a release always ships an installer and a firmware image from one commit |
+| INST-30 | The exe is unsigned, so Windows SmartScreen warns about it. A code-signing certificate costs more per year than the hardware; the published checksum is the alternative, and the warning is documented rather than left to surprise people |
 
 ---
 

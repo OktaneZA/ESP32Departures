@@ -64,8 +64,9 @@ screen, WiFi and USB-C are all on board.
 <img src="docs/bdddxxr4-qr.png" alt="QR code linking to the setup page" width="180">
 
 Use **Chrome or Edge on a computer** — they can talk to the board over USB.
-(Firefox and Safari can't, so they give you a settings file for the Windows
-installer instead.)
+
+Firefox and Safari can't, so they hand you a settings file instead. Drop that
+onto the **[Windows installer](https://github.com/OktaneZA/ESP32Departures/releases/latest)** and it does the same job.
 
 ---
 
@@ -112,7 +113,8 @@ itself, so they survive being unplugged — and survive firmware updates too.
 | | |
 |---|---|
 | [Getting your train data key](docs/api-key.md) | Free National Rail key, step by step with screenshots |
-| [Setup walkthrough](installer/README.md) | The Windows installer and troubleshooting |
+| [Download the Windows installer](https://github.com/OktaneZA/ESP32Departures/releases/latest) | For Firefox and Safari, or if you prefer a desktop app |
+| [Setup walkthrough](installer/README.md) | Using the installer, and troubleshooting |
 | [Technical detail](DETAILS.md) | Building the firmware, the data feeds, project layout |
 | [The setup page itself](web/README.md) | Running or hosting your own copy |
 | [Requirements](REQUIREMENTS.md) | The full specification |

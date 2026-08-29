@@ -1,0 +1,100 @@
+# Build the Windows installer and publish it as a GitHub Release.
+#
+# The exe bundles the firmware, so this builds the firmware from source first
+# rather than trusting whatever happens to be committed in installer/firmware/.
+# A release therefore always ships an exe and a firmware image that came from
+# the same commit.
+name: Release installer
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release as (e.g. v1.2.0)'
+        required: true
+
+permissions:
+  contents: write        # needed to create the release
+
+jobs:
+  build:
+    runs-on: windows-latest      # PyInstaller produces a native exe only on Windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      # --- firmware ------------------------------------------------------
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            .pio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+
+      - name: Build firmware
+        run: |
+          pip install --upgrade platformio
+          pio run
+
+      - name: Stage the freshly built firmware
+        shell: bash
+        run: |
+          cp .pio/build/lilygo-t-display-s3/firmware.bin installer/firmware/firmware.bin
+          cp .pio/build/lilygo-t-display-s3/bootloader.bin installer/firmware/bootloader.bin
+          cp .pio/build/lilygo-t-display-s3/partitions.bin installer/firmware/partitions.bin
+          ls -l installer/firmware/
+
+      # --- installer -----------------------------------------------------
+      - name: Build the exe
+        run: |
+          pip install -r installer/requirements-build.txt
+          python installer/build_exe.py
+
+      - name: Checksum
+        shell: bash
+        run: |
+          cd installer/dist
+          sha256sum DepartureBuddyInstaller.exe | tee DepartureBuddyInstaller.exe.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DepartureBuddyInstaller
+          path: |
+            installer/dist/DepartureBuddyInstaller.exe
+            installer/dist/DepartureBuddyInstaller.exe.sha256
+
+      # --- release -------------------------------------------------------
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Departure Buddy ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            installer/dist/DepartureBuddyInstaller.exe
+            installer/dist/DepartureBuddyInstaller.exe.sha256
+          body: |
+            ## Setting up a board
+
+            Most people should use the **[web configurator](https://tinyurl.com/bdddxxr4)**
+            instead of this download — in Chrome or Edge it flashes and configures
+            the board straight from the browser, with nothing to install.
+
+            This installer is for **Firefox and Safari users**, and for anyone who
+            prefers a desktop app. Download the exe below, plug the board in, and
+            run it.
+
+            > Windows SmartScreen will warn about an unrecognised app: the exe is
+            > unsigned, because a code-signing certificate costs more per year than
+            > the hardware. Choose **More info → Run anyway**, or verify the
+            > SHA-256 against the checksum file next to it.
+
+            The firmware in this release is built from this tag's source, so the
+            installer and the board are guaranteed to match.

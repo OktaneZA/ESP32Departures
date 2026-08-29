@@ -1,0 +1,5 @@
+# Runtime dependencies for the installer, and what CI installs to build the exe.
+pyserial>=3.5          # serial provisioning
+esptool>=4.7           # flashing, called in-process
+tzlocal>=5.2           # detects the PC's timezone
+tzdata>=2024.1         # the zone database tzlocal reads (data-only)

@@ -28,7 +28,8 @@ Two things to know:
   itself works without it; it just cannot put firmware on a blank board.
 
 Firefox and Safari have no Web Serial, so they get the downloadable settings
-file instead. The page detects this and says so.
+file instead, to be dropped onto the
+[Windows installer](https://github.com/OktaneZA/ESP32Departures/releases/latest). The page detects this and says so.
 
 ## Deploy to Azure Static Web Apps
 

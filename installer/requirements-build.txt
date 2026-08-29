@@ -1,0 +1,2 @@
+-r requirements.txt
+pyinstaller>=6.6       # only needed to build the exe, not to run the installer

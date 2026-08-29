@@ -19,6 +19,18 @@ brand-new board, for Firefox and Safari users, and for anyone who prefers it.
 It also accepts a settings file exported from that page — see
 [Testing without the GUI](#testing-without-the-gui) for the format.
 
+## Get it
+
+### → **[Download DepartureBuddyInstaller.exe](https://github.com/OktaneZA/ESP32Departures/releases/latest)**
+
+Built by CI from the tagged source, with the firmware compiled from the same
+commit — so the installer and the board it flashes always match.
+
+> Windows SmartScreen will warn about an unrecognised app. The exe is unsigned:
+> a code-signing certificate costs more per year than the hardware does. Choose
+> **More info → Run anyway**, or check the SHA-256 against the checksum file
+> published beside it.
+
 ## Before you start
 
 You need two things, both covered elsewhere:
