@@ -1,27 +1,23 @@
 # Departure Buddy — UK Train, London Bus & River Boat Board (LilyGo T-Display-S3)
 
-A C++/JSON rewrite of the [Raspberry Pi departure board](https://github.com/OktaneZA/PiDepartures) for the
-**LilyGo T-Display-S3** (ESP32-S3, 1.9″ 170×320 ST7789 LCD). No Pi, no Docker, no
-server — the ESP32 fetches live UK train departures over WiFi and drives the
-built-in colour LCD directly. It can also show **live London bus arrivals** for
-one stop and **live river boat sailings** (Uber Boat by Thames Clippers and the
-Woolwich Ferry) from one pier. Every service is optional — enable any
+A simple non coding, non soldering low cost tool to show live departures. It takes a little time to configure
+and is bases off the **LilyGo T-Display-S3** (ESP32-S3, 1.9″ 170×320 ST7789 LCD - see 
+   **[installer README](installer/README.md)** for details). The device fetches live data
+for National UK trains, **live London bus arrivals** buses and **live river boat sailings** (Uber Boat by Thames Clippers and the
+Woolwich Ferry) departures over WiFi. Every service is optional and based on your location — enable any
 combination and the board cycles through them.
 
-The aim was to make this even simpler and cheaper than previous iterations —
-£10 + some effort and you can have this running.
+The aim was to make this even simpler and cheaper than previous iterations — £10 + some effort and you can have this running.
 
-> **Credits.** Derived from Chris Crocker-White's
+> **Credits.** The train board is Derived from Chris Crocker-White's
 > [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display)
 > (original concept, layout, and dot-matrix fonts) via this repo's native
 > Raspberry Pi rewrite. See [REQUIREMENTS.md](REQUIREMENTS.md) for full lineage.
 
-The Pi app talks to National Rail's legacy SOAP/XML OpenLDBWS feed. This firmware
-uses the **same National Rail (Darwin) data**, but via the modern REST/JSON
-**Live Departure Board (LDBWS)** product on the free
-**[Rail Data Marketplace](https://raildata.org.uk)** — parsed on-device with
+This tool uses the **National Rail (Darwin) data**, but via the modern REST/JSON
+**Live Departure Board (LDBWS)** product on the free **[Rail Data Marketplace](https://raildata.org.uk)** — parsed on-device with
 ArduinoJson. (The old SOAP token no longer works; the marketplace REST API
-replaced it.)
+replaced it.) - See the installer readme on how to setup keys for your device (its free!)
 
 ## What it looks like
 
@@ -49,10 +45,6 @@ Two mockups rendered by `docs/render_mockup.py` — which mirrors
 `src/display.cpp` pixel-for-pixel — are also in `docs/` if you want the layout
 without a camera in the way.
 
-![The board running on a LilyGo T-Display-S3](docs/Esp32-2.jpg)
-
-*The board in a standard case. Photographed before the shared header row was
-added, so its on-screen layout differs slightly from the three above.*
 
 ## What it does
 
