@@ -9,6 +9,16 @@ the target PC.
 *Part of Departure Buddy, derived from
 [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display).*
 
+## Before you reach for this
+
+Most people should use the **web configurator** instead: it picks stations,
+stops and piers for you, previews the result, and in Chrome or Edge sends the
+settings straight to the board over USB. This installer is for flashing a
+brand-new board, for Firefox and Safari users, and for anyone who prefers it.
+
+It also accepts a settings file exported from that page — see
+[Testing without the GUI](#testing-without-the-gui) for the format.
+
 ## The hardware you need
 
 This project runs on the **LilyGo T-Display-S3** development board:

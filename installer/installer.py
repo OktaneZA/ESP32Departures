@@ -678,7 +678,9 @@ def provision(port, cfg, wait_boot=20.0):
 
         for key in ("ssid", "pass", "key", "dep", "dest", "plat", "tz",
                     "bus", "busline", "river", "riverline", "rivername",
-                    "mode", "bstart", "bend", "bright", "refr"):
+                    "mode", "bstart", "bend", "bright", "refr",
+                    "colfg", "coldim", "colwarn", "colbg",
+                    "dwtrain", "dwbus", "dwriver"):
             # None means "leave whatever the board already has". The firmware
             # stages a COMMIT on top of its current config, so simply not
             # sending a key preserves it.
@@ -1059,7 +1061,9 @@ def run_auto(path):
     cfg = {k: d.get(k) for k in
            ("ssid", "pass", "key", "dep", "dest", "plat", "tz",
             "bus", "busline", "river", "riverline", "rivername",
-            "mode", "bstart", "bend", "bright", "refr")}
+            "mode", "bstart", "bend", "bright", "refr",
+            "colfg", "coldim", "colwarn", "colbg",
+            "dwtrain", "dwbus", "dwriver")}
     if cfg["tz"] == "":
         cfg["tz"] = detect_tz()
     port = d.get("port") or pick_port()

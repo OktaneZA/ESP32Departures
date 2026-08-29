@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Departure Buddy — set up your board</title>
+<meta name="description" content="Configure a Departure Buddy departure board: trains, London buses and Thames river boats on a LilyGo T-Display-S3.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="top">
+  <h1>Departure Buddy</h1>
+  <p class="sub">Live UK trains, London buses and Thames river boats on a small desk board.
+     Set it up here, then send it straight to the device.</p>
+</header>
+
+<main>
+
+<!-- ─────────────────────────── Part 1: basics ─────────────────────────── -->
+<section class="card">
+  <h2><span class="step">1</span> Board basics</h2>
+
+  <div class="field">
+    <label for="ssid">WiFi network <span class="req">required</span></label>
+    <input id="ssid" type="text" autocomplete="off" spellcheck="false" placeholder="Your 2.4GHz network name">
+    <p class="hint">2.4GHz only — the ESP32-S3 has no 5GHz radio. This is the single
+       most common reason a board will not connect.</p>
+  </div>
+
+  <div class="field">
+    <label for="pass">WiFi password</label>
+    <input id="pass" type="password" autocomplete="off">
+    <p class="hint privacy">Everything on this page stays in your browser. Nothing is
+       sent anywhere — the settings go straight down the USB cable to your board.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="field">
+      <label for="onHour">Screen comes ON at</label>
+      <select id="onHour" autocomplete="off"></select>
+    </div>
+    <div class="field">
+      <label for="offHour">Screen goes OFF at</label>
+      <select id="offHour" autocomplete="off"></select>
+    </div>
+  </div>
+  <p class="hint" id="hoursSummary"></p>
+
+  <div class="grid-2">
+    <div class="field">
+      <label for="bright">Brightness <output id="brightOut"></output></label>
+      <input id="bright" type="range" min="10" max="255" step="5" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="refr">Refresh every <output id="refrOut"></output></label>
+      <input id="refr" type="range" min="15" max="300" step="5" autocomplete="off">
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────────────── Part 2: services ────────────────────────── -->
+<section class="card">
+  <h2><span class="step">2</span> What it shows</h2>
+  <p class="hint">The board cycles through everything you turn on, one screen at a time.</p>
+  <div id="services" class="services"></div>
+
+  <!-- Trains -->
+  <div class="svc" id="svc-train" hidden>
+    <h3>Trains</h3>
+    <div class="field">
+      <label for="stationSearch">Your station</label>
+      <input id="stationSearch" type="text" autocomplete="off" placeholder="Station name or CRS code, e.g. Motspur Park or MOT">
+      <div id="stationResults" class="results"></div>
+      <p class="chosen" id="stationChosen" hidden></p>
+    </div>
+    <div class="field">
+      <label for="apikey">National Rail API key <span class="req">required for trains</span></label>
+      <input id="apikey" type="password" autocomplete="off" placeholder="Consumer key from raildata.org.uk">
+      <p class="hint">Free from <a href="https://raildata.org.uk" target="_blank" rel="noopener">raildata.org.uk</a>
+         — subscribe to “Live Departure Board”. <button type="button" class="link" id="checkKey">Check it works</button>
+         <span id="keyStatus" class="status"></span></p>
+    </div>
+    <details>
+      <summary>Optional filters</summary>
+      <div class="grid-2">
+        <div class="field">
+          <label for="dest">Only trains towards (CRS)</label>
+          <input id="dest" type="text" maxlength="3" placeholder="e.g. WAT">
+        </div>
+        <div class="field">
+          <label for="plat">Only platform</label>
+          <input id="plat" type="text" maxlength="3" placeholder="e.g. 2">
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <!-- Buses -->
+  <div class="svc" id="svc-bus" hidden>
+    <h3>London buses</h3>
+    <div class="field">
+      <label for="busSearch">Your stop</label>
+      <input id="busSearch" type="text" autocomplete="off" placeholder="Postcode, place name, or the 5-digit code on the stop">
+      <p class="hint">Try a postcode (<code>SW19 7NL</code>), a place (<code>Green Park Station</code>),
+         or the stop’s own code. <button type="button" class="link" id="busGo">Search</button></p>
+      <div id="busResults" class="results"></div>
+      <p class="chosen" id="busChosen" hidden></p>
+    </div>
+    <div class="field">
+      <label for="busline">Only one route (optional)</label>
+      <input id="busline" type="text" placeholder="e.g. 38 — blank shows every route">
+    </div>
+  </div>
+
+  <!-- River -->
+  <div class="svc" id="svc-river" hidden>
+    <h3>River boats</h3>
+    <div class="field">
+      <label for="pierSelect">Your pier</label>
+      <select id="pierSelect"><option value="">Loading piers from TfL…</option></select>
+      <p class="hint">Uber Boat by Thames Clippers (RB1/RB4/RB6) and the Woolwich Ferry.
+         <span class="warn-note">RB2 (Tate to Tate) is not published by TfL, so it cannot be shown.</span></p>
+      <p class="chosen" id="pierChosen" hidden></p>
+    </div>
+    <div class="field">
+      <label for="riverline">Only one route (optional)</label>
+      <input id="riverline" type="text" placeholder="e.g. RB1 — blank shows every route">
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Part 3: appearance ───────────────────────── -->
+<section class="card">
+  <h2><span class="step">3</span> Look and timing</h2>
+
+  <div class="field">
+    <label>Theme</label>
+    <div id="themes" class="themes"></div>
+  </div>
+
+  <details id="customColours">
+    <summary>Custom colours</summary>
+    <div class="grid-4">
+      <div class="field"><label for="colfg">Main text</label><input id="colfg" type="color"></div>
+      <div class="field"><label for="coldim">Secondary</label><input id="coldim" type="color"></div>
+      <div class="field"><label for="colwarn">Alerts</label><input id="colwarn" type="color"></div>
+      <div class="field"><label for="colbg">Background</label><input id="colbg" type="color"></div>
+    </div>
+    <p class="hint">The board’s panel is 16-bit, so the preview shows the exact shade it
+       can actually draw — which may differ very slightly from the one you pick.</p>
+  </details>
+
+  <div id="dwellWrap">
+    <label class="group-label">How long each screen stays up</label>
+    <div class="grid-3" id="dwells"></div>
+  </div>
+</section>
+
+<!-- ──────────────────────────── Preview ───────────────────────────────── -->
+<section class="card">
+  <h2><span class="step">4</span> Preview</h2>
+  <p class="hint">Roughly what the 320×170 panel will show, at actual proportions.</p>
+  <div id="preview" class="preview-wrap"></div>
+  <div class="preview-tabs" id="previewTabs"></div>
+</section>
+
+<!-- ──────────────────────────── Install ───────────────────────────────── -->
+<section class="card">
+  <h2><span class="step">5</span> Send it to your board</h2>
+
+  <div id="problems" class="problems" hidden></div>
+
+  <div id="webserial" class="install-option">
+    <h3>Configure over USB <span class="badge">recommended</span></h3>
+    <p class="hint">Plug the board in, click below, and pick it from the list. Your
+       settings never leave this computer.</p>
+    <button type="button" class="primary" id="btnConnect">Connect &amp; configure</button>
+    <div id="serialLog" class="log" hidden></div>
+  </div>
+
+  <div id="nowebserial" class="install-option" hidden>
+    <h3>Your browser can’t talk to USB devices</h3>
+    <p class="hint">Direct configuration needs Chrome, Edge or Opera on a desktop.
+       In Firefox and Safari, download the settings file below and use the installer.</p>
+  </div>
+
+  <div class="install-option">
+    <h3>Or download a settings file</h3>
+    <p class="hint">Save this, then drag it onto <code>DepartureBuddyInstaller.exe</code>.
+       It flashes the board and applies these settings.</p>
+    <button type="button" id="btnDownload">Download settings file</button>
+    <p class="hint secrets-warning">Heads up: this file contains your WiFi password in
+       plain text, so it can set the board up without you retyping anything. Keep it
+       somewhere sensible and delete it when you’re done — the installer offers to do
+       that for you.</p>
+  </div>
+</section>
+
+<footer>
+  <p>Powered by <a href="https://tfl.gov.uk" target="_blank" rel="noopener">Transport for London</a>
+     open data and National Rail Darwin via
+     <a href="https://raildata.org.uk" target="_blank" rel="noopener">Rail Data Marketplace</a>.
+     Station positions contain public sector information licensed under the
+     <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" target="_blank" rel="noopener">Open Government Licence v3.0</a>.</p>
+  <p>This page is static and runs entirely in your browser —
+     <a href="https://github.com/OktaneZA/ESP32Departures" target="_blank" rel="noopener">read the source</a>.</p>
+</footer>
+
+</main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

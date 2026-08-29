@@ -1,0 +1,39 @@
+# Publish the web configurator to GitHub Pages.
+#
+# The site is entirely static: no backend, no build step, no secrets. Every API
+# it calls (TfL Unified, TfL Countdown, postcodes.io, Rail Data Marketplace) is
+# CORS-open, which is what lets it be hosted this way at all.
+name: Publish configurator
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a half-finished deploy; queue instead.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -335,6 +335,13 @@ setup" having silently lost its WiFi, API key and station.
 | `bstart` | No | `-1` | Screen-blank start hour — when the screen goes OFF (−1 = never blank). The installer offers `22` on a new board |
 | `bend` | No | `-1` | Screen-blank end hour — when the screen comes back ON (−1 = never blank). The installer offers `6` on a new board |
 | `bright` | No | `180` | Backlight brightness (0–255) |
+| `colfg` | No | `-1` | Primary text colour, RGB565 (−1 = the compiled-in amber) |
+| `coldim` | No | `-1` | Secondary / dimmed text colour, RGB565 |
+| `colwarn` | No | `-1` | Cancellation and alert colour, RGB565 |
+| `colbg` | No | `-1` | Background colour, RGB565 |
+| `dwtrain` | No | `-1` | Seconds the train screen holds (−1 = `TRAIN_SCREEN_SECONDS`) |
+| `dwbus` | No | `-1` | Seconds the bus screen holds |
+| `dwriver` | No | `-1` | Seconds the river screen holds |
 | `refr` | No | `60` | API poll interval (seconds) |
 
 | ID | Requirement |
@@ -348,6 +355,8 @@ setup" having silently lost its WiFi, API key and station.
 | CFG-07 | A board is provisioned once it has WiFi and **at least one** live service. A boats-only board needs no API key and no station at all |
 | CFG-08 | Legacy `mode` values are still honoured, so a board flashed before the river screen keeps working with its stored settings untouched: absent and `both` both mean `train,bus`; a lone `train` or `bus` is already a valid one-element set |
 | CFG-09 | `mode` matching is on whole comma-separated tokens, never substrings, so a malformed value cannot switch on a service the user did not choose |
+| CFG-10 | Colours and dwell times default to `-1` meaning **not set**, and `Config::pick()` falls back to the `app_config.h` value. A board provisioned before these existed therefore looks and behaves exactly as it did — the same mechanism `rivername` uses (RIV-13) |
+| CFG-11 | Out-of-range values are treated as unset rather than applied: a colour outside 0–0xFFFF cannot be drawn, and dwell times are clamped to 3–300s so a stored value can never strobe the board or freeze a screen |
 
 ---
 
@@ -396,6 +405,7 @@ Newline-terminated line protocol on the USB CDC serial port (`src/config.cpp`).
 | PROV-08 | `SCAN` → one `SSID|rssi=|ch=|auth=` line per visible network, then `END`. The ESP32-S3 has no 5 GHz radio, so a network missing here but visible on a phone is the usual explanation for a board that will not connect |
 | PROV-09 | A `COMMIT` stages on top of the current config, so **omitting** a key preserves its stored value — the mechanism INST-11 relies on to avoid retyping secrets |
 | PROV-10 | `GET` reports a legacy `mode` as the set it means (`train,bus`), so the installer only ever has to understand the comma-separated form |
+| PROV-11 | The protocol is transport-agnostic: the same `PING`/`CFG`/`COMMIT` exchange is driven by the Python installer over pyserial and by the web configurator over Web Serial, with no firmware-side difference |
 
 ---
 
@@ -459,6 +469,29 @@ PyInstaller) that flashes the firmware and provisions the board.
 
 ---
 
+## 8a. Web Configurator
+
+A static single-page app (`web/`) published to GitHub Pages, which configures a
+board either directly over Web Serial or by exporting a settings file for the
+installer.
+
+| ID | Requirement |
+|---|---|
+| WEB-01 | **No backend.** The page is static files only: no server, no database, no telemetry. Every lookup is a direct browser call to a third-party API |
+| WEB-02 | This is possible because every API used is CORS-open — TfL Unified and Countdown and postcodes.io send `Access-Control-Allow-Origin: *`, and Rail Data Marketplace reflects the requesting origin |
+| WEB-03 | Requests carry **no custom headers**. Adding one makes them non-simple, and the TfL endpoints answer the GET but not the resulting CORS preflight, so the call fails. The `.exe` sends a `User-Agent` because it is not bound by CORS; the page must not |
+| WEB-04 | Secrets never leave the browser. The WiFi password and API key are held in memory and written only to the device over USB, or to a file the user explicitly downloads |
+| WEB-05 | The page live-validates the train API key and CRS against the real endpoint before the user connects a board, so a typo is caught with no hardware involved |
+| WEB-06 | Stop, pier and postcode lookups are ports of the `installer.py` functions and must resolve a given search to the same result, so both front-ends configure a board identically |
+| WEB-07 | Station search uses a baked `data/stations.json`: no CORS-friendly UK-wide station search exists, so the lookup has to be local |
+| WEB-08 | The preview shows colours **round-tripped through RGB565**, since the panel is 16-bit and promising a shade it cannot draw would make the preview a lie |
+| WEB-09 | Form state is derived from the DOM, not tracked separately. Browsers restore control state on reload, and a separately-tracked copy would silently disagree with what the user sees — exporting a config for services no longer shown as selected |
+| WEB-10 | Web Serial is feature-detected. Where it is missing (Firefox, Safari, mobile) the page falls back to the downloadable settings file and says so plainly |
+| WEB-11 | After `COMMIT` the board reboots and, being native USB CDC, its port re-enumerates as a new device — invalidating the held handle. The page waits for reconnection and degrades to a plain success message rather than reporting a failure |
+| WEB-12 | A downloaded settings file contains the WiFi password in plain text. The page says so where the download is offered; this is the documented exception to SEC-05 |
+
+---
+
 ## 9. Security Requirements
 
 | ID | Requirement |
@@ -467,7 +500,7 @@ PyInstaller) that flashes the firmware and provisions the board.
 | SEC-02 | HTTPS enforced for LDBWS; TLS used for all API traffic |
 | SEC-03 | The API key is never printed to serial (masked in `GET`) |
 | SEC-04 | No credentials committed to source; `secrets.h` is git-ignored and unused at runtime |
-| SEC-05 | Installer keeps entered secrets in memory only; nothing written to disk on the target PC |
+| SEC-05 | Installer keeps entered secrets in memory only; nothing written to disk on the target PC. **Documented exception:** a settings file exported from the web configurator carries the WiFi password and API key by design, so the file alone can set a board up — the page warns about it at the point of download (WEB-12) |
 | SEC-06 | TLS server-certificate verification is a documented hardening option (`setCACert`); default `setInsecure()` is called out as a trade-off |
 | SEC-07 | Both TfL requests (bus and river) carry no credentials of any kind, so nothing sensitive is exposed by them |
 | SEC-08 | The bus stop code and route filter are percent-encoded into the query string, and the pier ID into the request path, so a stray character cannot alter either request |

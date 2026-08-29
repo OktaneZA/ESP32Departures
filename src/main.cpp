@@ -274,6 +274,8 @@ void setup() {
 
     g_mutex = xSemaphoreCreateMutex();
     ui::begin(c.brightness);
+    // Before the first frame, so even the "Awaiting setup" screen is themed.
+    ui::setTheme(c.col_fg, c.col_dim, c.col_warn, c.col_bg);
 
     // Not configured yet: show the setup screen and wait for the installer.
     // (A COMMIT over serial saves to NVS and reboots into the provisioned path.)
@@ -311,12 +313,26 @@ void setup() {
 // ---------------------------------------------------------------------------
 enum class Screen { Train, Bus, River };
 
+// How long a screen holds before the rotation moves on. The provisioned value
+// wins when there is one; otherwise the app_config.h default applies, so a board
+// configured before these settings existed keeps its original timing. Clamped to
+// 3..300s: a sub-second dwell would strobe the board, and the marquee needs long
+// enough to actually read a scrolling name.
 static uint32_t dwellMs(Screen s) {
+    const Config& c = cfg::get();
+    int seconds;
     switch (s) {
-        case Screen::Bus:   return BUS_SCREEN_SECONDS * 1000UL;
-        case Screen::River: return RIVER_SCREEN_SECONDS * 1000UL;
-        default:            return TRAIN_SCREEN_SECONDS * 1000UL;
+        case Screen::Bus:
+            seconds = Config::pick(c.dwell_bus, BUS_SCREEN_SECONDS, 3, 300);
+            break;
+        case Screen::River:
+            seconds = Config::pick(c.dwell_river, RIVER_SCREEN_SECONDS, 3, 300);
+            break;
+        default:
+            seconds = Config::pick(c.dwell_train, TRAIN_SCREEN_SECONDS, 3, 300);
+            break;
     }
+    return (uint32_t)seconds * 1000UL;
 }
 
 void loop() {

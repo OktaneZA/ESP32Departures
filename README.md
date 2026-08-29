@@ -69,10 +69,23 @@ added, so its on-screen layout differs slightly from the three above.*
   goes. Real live predictions, not a timetable
 - Top three departures: time + destination, with status (delay/cancellation)
   and platform when relevant; long names scroll
+- **Your own colours and timings** — theme the board (classic amber, white,
+  phosphor green, high contrast, or anything you pick) and choose how long each
+  screen holds, all without recompiling
 - Big NTP clock in a dot-matrix font, with automatic BST
 - Exponential back-off on API failure, stale data kept on screen with a
   "No signal" indicator, and a connectivity-warning screen after 3 failures
 - Optional screen-blank hours; runtime-adjustable brightness
+
+## Set it up in your browser
+
+The quickest route is the **web configurator**: pick your station, stop and pier,
+choose colours and timings, see a live preview, then send it all to the board
+over USB from the browser. Nothing you type leaves your computer — the page is
+static and talks to the device directly.
+
+Chrome, Edge and Opera on a desktop can configure the board directly. In Firefox
+and Safari the page instead hands you a settings file to drop onto the installer.
 
 ## Install — the easy way (Windows)
 
@@ -167,6 +180,12 @@ ESP32Departures/
 │   ├── river_api.cpp         TfL live river sailings (Unified API) client
 │   └── display.cpp           LovyanGFX panel config + rendering
 ├── docs/                     mockup renderer + font-conversion script
+├── web/                      the web configurator (static, GitHub Pages)
+│   ├── index.html            the form, preview and installer UI
+│   ├── js/config.js          config model, mode set, RGB565 colour maths
+│   ├── js/api.js             TfL / postcode / rail lookups (ports of installer.py)
+│   ├── js/serial.js          Web Serial provisioning (PING/CFG/COMMIT)
+│   └── data/stations.json    2,608 UK stations: CRS, name, position
 └── installer/                self-contained Windows installer (.exe)
 ```
 
@@ -200,3 +219,13 @@ ESP32Departures/
   already relative, so the countdown is right even before NTP has synced.
   RB2 (Tate to Tate) is not published on this feed. Screen timing is
   `RIVER_SCREEN_SECONDS`. Data provided by Transport for London.
+- **The web configurator needs no backend.** Every API it uses is CORS-open, so
+  it is plain static hosting: TfL Unified and Countdown send
+  `Access-Control-Allow-Origin: *`, postcodes.io the same, and Rail Data
+  Marketplace reflects the requesting origin — which even lets the page check
+  your API key before you plug anything in. One catch worth knowing if you
+  extend it: adding *any* custom request header makes those calls non-simple,
+  and the TfL endpoints answer the GET but not the CORS preflight, so the
+  request fails. `web/js/api.js` deliberately sends none.
+- **Station positions** come from NaPTAN (Open Government Licence v3); CRS codes
+  are cross-checked against it, with 2,606 of 2,608 confirmed to within 2km.

@@ -75,11 +75,14 @@ namespace {
 constexpr int W = 320;
 constexpr int H = 170;
 
-// Colours (RGB565).
-constexpr uint16_t BLACK = 0x0000;
-constexpr uint16_t AMBER = 0xFD20;  // classic departure-board amber
-constexpr uint16_t RED   = 0xF800;  // cancellations
-constexpr uint16_t DIM   = 0x8300;  // dimmed amber for secondary text
+// Colours (RGB565). Variables rather than constants so the palette can be set
+// from the provisioned config at boot — the names stay put so the ~30 call
+// sites below read the same as they always did. The defaults are the classic
+// departure-board amber-on-black, used verbatim when nothing was provisioned.
+uint16_t BLACK = 0x0000;
+uint16_t AMBER = 0xFD20;  // classic departure-board amber
+uint16_t RED   = 0xF800;  // cancellations
+uint16_t DIM   = 0x8300;  // dimmed amber for secondary text
 
 LGFX_TDisplayS3 lcd;
 lgfx::LGFX_Sprite spr(&lcd);
@@ -323,6 +326,20 @@ void begin(uint8_t brightness) {
 
 void setBrightness(uint8_t brightness) {
     lcd.setBrightness(brightness);
+}
+
+void setTheme(int fg, int dim, int warn, int bg) {
+    // Each colour is applied only when the caller actually has one; a negative
+    // or out-of-range value means "not provisioned", leaving the classic amber
+    // default in place. Callers pass Config's raw ints straight through, so the
+    // range check lives here rather than being repeated at every call site.
+    auto apply = [](uint16_t& target, int value) {
+        if (value >= 0 && value <= 0xFFFF) target = (uint16_t)value;
+    };
+    apply(AMBER, fg);
+    apply(DIM, dim);
+    apply(RED, warn);
+    apply(BLACK, bg);
 }
 
 void renderSetup() {

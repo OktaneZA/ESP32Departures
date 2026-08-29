@@ -23,6 +23,25 @@ struct Config {
     int    brightness  = 180;  // 0-255
     int    refresh     = 60;   // poll interval, seconds
 
+    // Appearance and rotation timing. Every one of these is optional: -1 means
+    // "not set", and the firmware falls back to the app_config.h default. That
+    // is what keeps a board provisioned before these existed looking exactly as
+    // it did — the same trick river_name uses for the pier label.
+    int    col_fg   = -1;      // primary text colour, RGB565 (-1 = default amber)
+    int    col_dim  = -1;      // secondary / dimmed text
+    int    col_warn = -1;      // cancellations and alerts
+    int    col_bg   = -1;      // background
+    int    dwell_train = -1;   // seconds the train screen holds (-1 = default)
+    int    dwell_bus   = -1;   // seconds the bus screen holds
+    int    dwell_river = -1;   // seconds the river screen holds
+
+    // A stored setting wins only when it was actually set; otherwise the
+    // compile-time default applies. Colours are 16-bit, so any value outside
+    // 0..0xFFFF is treated as unset rather than silently drawn as garbage.
+    static int pick(int stored, int fallback, int lo, int hi) {
+        return (stored >= lo && stored <= hi) ? stored : fallback;
+    }
+
     // Which services the user asked for. `mode` is a comma-separated set, so any
     // combination can be enabled and the board cycles through whatever is on.
     //

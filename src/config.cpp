@@ -11,7 +11,7 @@
 //   SCAN                 -> WiFi networks the board can actually see, then END
 //
 // Keys: ssid pass key dep dest plat tz bus busline river riverline rivername mode
-//       bstart bend bright refr
+//       bstart bend bright refr colfg coldim colwarn colbg dwtrain dwbus dwriver
 
 #include "config.h"
 #include "app_config.h"   // compile-time defaults
@@ -47,6 +47,16 @@ void load_from_nvs(Config& c) {
     c.blank_end   = prefs.getInt("bend",   -1);
     c.brightness  = prefs.getInt("bright", BRIGHTNESS);
     c.refresh     = prefs.getInt("refr",   REFRESH_SECONDS);
+    // Appearance and dwell default to -1 ("not set") rather than to the real
+    // values, so Config::pick() can tell "the user chose this" from "nobody ever
+    // said", and a board provisioned before these existed keeps its old look.
+    c.col_fg      = prefs.getInt("colfg",  -1);
+    c.col_dim     = prefs.getInt("coldim", -1);
+    c.col_warn    = prefs.getInt("colwarn", -1);
+    c.col_bg      = prefs.getInt("colbg",  -1);
+    c.dwell_train = prefs.getInt("dwtrain", -1);
+    c.dwell_bus   = prefs.getInt("dwbus",  -1);
+    c.dwell_river = prefs.getInt("dwriver", -1);
     prefs.end();
 }
 
@@ -74,6 +84,13 @@ void stage_kv(const String& kv) {
     else if (k == "bend")   g_stage.blank_end   = v.toInt();
     else if (k == "bright") g_stage.brightness  = v.toInt();
     else if (k == "refr")   g_stage.refresh     = v.toInt();
+    else if (k == "colfg")  g_stage.col_fg      = v.toInt();
+    else if (k == "coldim") g_stage.col_dim     = v.toInt();
+    else if (k == "colwarn") g_stage.col_warn   = v.toInt();
+    else if (k == "colbg")  g_stage.col_bg      = v.toInt();
+    else if (k == "dwtrain") g_stage.dwell_train = v.toInt();
+    else if (k == "dwbus")  g_stage.dwell_bus   = v.toInt();
+    else if (k == "dwriver") g_stage.dwell_river = v.toInt();
     else { Serial.print("ERR key "); Serial.println(k); return; }
 
     Serial.print("ACK "); Serial.println(k);
@@ -99,6 +116,13 @@ void commit_and_reboot() {
     prefs.putInt("bend",   g_stage.blank_end);
     prefs.putInt("bright", g_stage.brightness);
     prefs.putInt("refr",   g_stage.refresh);
+    prefs.putInt("colfg",  g_stage.col_fg);
+    prefs.putInt("coldim", g_stage.col_dim);
+    prefs.putInt("colwarn", g_stage.col_warn);
+    prefs.putInt("colbg",  g_stage.col_bg);
+    prefs.putInt("dwtrain", g_stage.dwell_train);
+    prefs.putInt("dwbus",  g_stage.dwell_bus);
+    prefs.putInt("dwriver", g_stage.dwell_river);
     prefs.end();
     Serial.println("SAVED");
     Serial.flush();
@@ -175,6 +199,13 @@ void handle_line(String line) {
         Serial.print("bend=");   Serial.println(g_cfg.blank_end);
         Serial.print("bright="); Serial.println(g_cfg.brightness);
         Serial.print("refr=");   Serial.println(g_cfg.refresh);
+        Serial.print("colfg=");  Serial.println(g_cfg.col_fg);
+        Serial.print("coldim="); Serial.println(g_cfg.col_dim);
+        Serial.print("colwarn="); Serial.println(g_cfg.col_warn);
+        Serial.print("colbg=");  Serial.println(g_cfg.col_bg);
+        Serial.print("dwtrain="); Serial.println(g_cfg.dwell_train);
+        Serial.print("dwbus=");  Serial.println(g_cfg.dwell_bus);
+        Serial.print("dwriver="); Serial.println(g_cfg.dwell_river);
         Serial.print("wifi=");   Serial.println(WiFi.status() == WL_CONNECTED ? "up" : "down");
         Serial.print("prov=");   Serial.println(g_cfg.provisioned() ? 1 : 0);
         Serial.println("END");

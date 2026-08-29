@@ -11,6 +11,12 @@ void begin(uint8_t brightness);
 // Set the LCD backlight brightness (0-255) at runtime.
 void setBrightness(uint8_t brightness);
 
+// Set the board's palette (RGB565). Any argument outside 0..0xFFFF — notably
+// the -1 Config uses for "not provisioned" — leaves that colour at the classic
+// amber-on-black default, so an unconfigured board looks exactly as it always
+// did. Call once at boot, before the first render.
+void setTheme(int fg, int dim, int warn, int bg);
+
 // "Awaiting setup" screen shown until the device is provisioned by the installer.
 void renderSetup();
 
