@@ -45,9 +45,6 @@ screen, WiFi and USB-C are all on board.
 > ⚠️ Don't buy the look-alikes: **AMOLED** (1.91″), **Pro** (2.33″), **Long**
 > (3.4″), or the older **T-Display** (ESP32, 1.14″). None of them work with this.
 
-<sub>The Amazon links are affiliate links — if you buy through one it costs you
-nothing extra and helps support the project.</sub>
-
 ---
 
 ## 2. Open the setup page
