@@ -2,9 +2,15 @@
 
     python docs/gen_crt_bundle.py
 
-Downloads Mozilla's root store (as published by the curl project) and writes
-data/cert/x509_crt_bundle.bin, which platformio.ini embeds and the API clients
-attach with setCACertBundle().
+Downloads Mozilla's root store (as published by the curl project), merges
+docs/extra_roots.pem, and writes data/cert/x509_crt_bundle.bin, which
+platformio.ini embeds and the API clients attach with setCACertBundle().
+
+The supplementary file exists because esp_crt_bundle.c only ever looks up the
+issuer of the *topmost* certificate a server sends. Where a server presents a
+root cross-signed by an older one - as TfL and the Rail Data Marketplace both do
+- that older root has to be present even though a browser would have stopped a
+link earlier. Two of the five feeds fail the handshake without it.
 
 Without this the clients call setInsecure(): traffic is encrypted but the server
 is never authenticated, so anything able to intercept the connection can feed
@@ -38,6 +44,11 @@ SOURCE = "https://curl.se/ca/cacert.pem"
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "data", "cert", "x509_crt_bundle.bin")
 
+# Roots that Mozilla has retired but that our feeds still chain through. See the
+# file itself for why each one is there; without it two of the five feeds cannot
+# complete a handshake at all.
+EXTRA = os.path.join(HERE, "extra_roots.pem")
+
 
 def fetch(url):
     print(f"  fetching {url}")
@@ -49,7 +60,21 @@ def fetch(url):
 def main():
     pem = fetch(SOURCE)
     certs = x509.load_pem_x509_certificates(pem)
-    print(f"  {len(certs)} root certificates")
+    print(f"  {len(certs)} root certificates from Mozilla")
+
+    if os.path.exists(EXTRA):
+        with open(EXTRA, "rb") as f:
+            extra = x509.load_pem_x509_certificates(f.read())
+        # Skip any that Mozilla has since restored, so the bundle never holds a
+        # subject twice - the runtime does a binary search and a duplicate would
+        # make which one it finds a matter of luck.
+        have = {c.subject.public_bytes() for c in certs}
+        extra = [c for c in extra if c.subject.public_bytes() not in have]
+        for c in extra:
+            print(f"  + supplementary: {c.subject.rfc4514_string()}")
+        certs += extra
+    else:
+        print(f"  (no {os.path.basename(EXTRA)} - skipping supplementary roots)")
 
     entries = []
     skipped = 0
