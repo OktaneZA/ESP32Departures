@@ -574,6 +574,7 @@ function showProblems() {
       + list.map((p) => `<li>${escapeHtml(p)}</li>`).join('') + '</ul>';
   }
   $('btnConnect').disabled = !!list.length;
+  $('btnFlash').disabled = !!list.length;
   $('btnDownload').disabled = !!list.length;
 }
 
@@ -592,7 +593,12 @@ function initInstall() {
     URL.revokeObjectURL(a.href);
   };
 
-  $('btnConnect').onclick = connectAndConfigure;
+  // Two deliberate entry points. Until now the page would only flash a board
+    // that failed to answer at all, so a board running *old* firmware could never
+    // be updated from here -- it answered PING, went straight to provisioning, and
+    // silently refused every setting it had never heard of.
+  $('btnConnect').onclick = () => connectAndConfigure({ flashFirst: false });
+  $('btnFlash').onclick = () => connectAndConfigure({ flashFirst: true });
 }
 
 function logLine(msg, cls = '') {
@@ -602,16 +608,18 @@ function logLine(msg, cls = '') {
   el.scrollTop = el.scrollHeight;
 }
 
-async function connectAndConfigure() {
-  const btn = $('btnConnect');
-  btn.disabled = true;
+async function connectAndConfigure({ flashFirst = false } = {}) {
+  const btn = $(flashFirst ? 'btnFlash' : 'btnConnect');
+  const other = $(flashFirst ? 'btnConnect' : 'btnFlash');
+  btn.disabled = other.disabled = true;
+  const release = () => { btn.disabled = other.disabled = false; };
   $('serialLog').innerHTML = '';
   let board;
   try {
     board = await Board.request();
   } catch {
     logLine('No device selected.', 'bad');
-    btn.disabled = false;
+    release();
     return;
   }
 
@@ -619,32 +627,57 @@ async function connectAndConfigure() {
     logLine('Opening the port…');
     await board.open();
 
-    logLine('Saying hello…');
-    let banner = await board.handshake();
+    let banner = null;
+    if (flashFirst) {
+      logLine('Flashing first, then applying your settings.');
+      await board.close();
+      if (!(await flashFirmware(board.port))) { release(); return; }
+      logLine('Reconnecting after the flash…');
+      if (!(await waitForReconnect(board, 20000))) {
+        logLine('Firmware written. The board restarted and came back as a new '
+          + 'USB device, so this page had to let go of it.', 'ok');
+        logLine('Press “Send my settings” (step 2) and pick the board again.');
+        release();
+        return;
+      }
+      banner = await board.handshake(15000);
+      if (!banner) {
+        logLine('Firmware written, but the board is not answering yet. Unplug it, '
+          + 'plug it back in, then press “Send my settings”.', 'bad');
+        await board.close();
+        release();
+        return;
+      }
+    }
+
+    if (!banner) logLine('Saying hello…');
+    if (!banner) banner = await board.handshake();
 
     if (!banner) {
       // Nothing answered, so this is almost certainly a board that has never
       // been flashed. Offer to do it rather than dead-ending the user.
       logLine('No response — this board has no Departure Buddy firmware yet.');
+      logLine('Flashing it now. (This is what step 1 does; you can start there '
+        + 'next time.)');
       await board.close();
-      if (!(await flashFirmware(board.port))) { btn.disabled = false; return; }
+      if (!(await flashFirmware(board.port))) { release(); return; }
 
       logLine('Reconnecting after the flash…');
       // The board reboots into new firmware and its USB port re-enumerates, so
       // the handle is stale — reopen before trying to talk to it.
       if (!(await waitForReconnect(board, 20000))) {
         logLine('The board restarted but its port came back as a new device.', 'bad');
-        logLine('Click “Connect & configure” again and pick it once more — the '
+        logLine('Press “Send my settings” (step 2) and pick it once more — the '
           + 'firmware is already on there, so this time it will just apply your settings.');
-        btn.disabled = false;
+        release();
         return;
       }
       banner = await board.handshake(15000);
       if (!banner) {
         logLine('Flashed, but the board is not answering yet. Unplug it, plug it '
-          + 'back in, and click Connect again to apply your settings.', 'bad');
+          + 'back in, and press “Send my settings” (step 2).', 'bad');
         await board.close();
-        btn.disabled = false;
+        release();
         return;
       }
     }
@@ -664,14 +697,15 @@ async function connectAndConfigure() {
       logLine(`Your board refused ${rejected.length} setting${rejected.length > 1 ? 's' : ''}: `
         + rejected.join(', '), 'bad');
       logLine('That means it is running older firmware than this page expects. '
-        + 'Flash the firmware (tick "Update the firmware" above) and set it up again '
-        + '— otherwise screens, buttons and colours will not work as configured.', 'bad');
+        + 'Press “Flash the firmware” (step 1) — it updates the board and reapplies '
+        + 'these settings — otherwise screens, buttons and colours will not work '
+        + 'as configured.', 'bad');
     }
 
     if (!saved) {
       logLine('The board didn’t confirm the save. Try again, or replug it.', 'bad');
       await board.close();
-      btn.disabled = false;
+      release();
       return;
     }
     logLine('Saved. The board is rebooting…', 'ok');
@@ -680,7 +714,7 @@ async function connectAndConfigure() {
     if (!back) {
       logLine('Done — the board is restarting with your settings.', 'ok');
       logLine('(Its USB port reconnected as a new device, so this page let go of it.)');
-      btn.disabled = false;
+      release();
       return;
     }
     await sleep(1200);
@@ -696,7 +730,7 @@ async function connectAndConfigure() {
     logLine('Something went wrong: ' + (e?.message || e), 'bad');
     try { await board.close(); } catch { }
   }
-  btn.disabled = false;
+  release();
   showProblems();
 }
 
@@ -724,8 +758,9 @@ async function verifyFirmware(board) {
     logLine('This board is NOT running the firmware published here.', 'bad');
     logLine(`  board:     ${got.md5}`);
     logLine(`  published: ${want}`);
-    logLine('That is expected if you built it yourself or flashed an older '
-      + 'release. If you did not, reflash from this page.');
+    logLine('That is expected if you built it yourself. Otherwise the board is on '
+      + 'an older release: press “Flash the firmware” (step 1) to bring it up to '
+      + 'date, which also reapplies your settings.');
   }
 }
 

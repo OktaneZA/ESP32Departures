@@ -228,30 +228,59 @@
 
 <!-- ──────────────────────────── Install ───────────────────────────────── -->
 <section class="card">
-  <h2><span class="step">5</span> Send it to your board</h2>
+  <h2><span class="step">5</span> Put it on the board</h2>
+
+  <p class="install-lead"><strong>Brand-new board?</strong> Start at step 1.
+     <strong>Board already running Departure Buddy?</strong> Go straight to step 2 —
+     unless you are updating, in which case step 1 does both.</p>
 
   <div id="problems" class="problems" hidden></div>
 
-  <div id="webserial" class="install-option">
-    <h3>Configure over USB <span class="badge">recommended</span></h3>
-    <p class="hint">Plug the board in, click below, and pick it from the list. Your
-       settings never leave this computer.</p>
-    <button type="button" class="primary" id="btnConnect">Connect &amp; configure</button>
+  <div id="webserial">
+    <div class="install-step">
+      <span class="step-num">1</span>
+      <div class="install-step-body">
+        <button type="button" class="primary" id="btnFlash">Flash the firmware</button>
+        <p class="hint">Needed once on a board that has never run this before, and
+           again whenever there is a firmware update. It writes the firmware and
+           then carries straight on into step 2, so normally this one button does
+           everything. Takes about a minute.</p>
+        <p class="hint">Your existing settings on the board are kept — flashing
+           replaces the program, not the configuration.</p>
+      </div>
+    </div>
+
+    <div class="install-step">
+      <span class="step-num">2</span>
+      <div class="install-step-body">
+        <button type="button" class="primary" id="btnConnect">Send my settings</button>
+        <p class="hint">Sends everything above to a board that already has the
+           firmware. This is the one to use whenever you change what it shows.
+           If step 1 finished but could not carry on by itself — the board
+           reappears as a new device when it restarts — press this and pick the
+           board again.</p>
+      </div>
+    </div>
+
+    <p class="hint">Plug the board in first, then pick it from the list your browser
+       shows. Your settings never leave this computer.</p>
     <div id="serialLog" class="log" hidden></div>
   </div>
 
   <div id="nowebserial" class="install-option" hidden>
     <h3>Your browser can’t talk to USB devices</h3>
-    <p class="hint">Direct configuration needs Chrome, Edge or Opera on a desktop.
-       In Firefox and Safari, download the settings file below and drop it onto
-       the <a href="https://github.com/OktaneZA/ESP32Departures/releases/latest" target="_blank" rel="noopener">Windows installer</a>.</p>
+    <p class="hint">Flashing and configuring over USB needs Chrome, Edge or Opera on
+       a desktop. In Firefox and Safari, download the settings file below and drop it
+       onto the <a href="https://github.com/OktaneZA/ESP32Departures/releases/latest" target="_blank" rel="noopener">Windows installer</a>,
+       which does both steps for you.</p>
   </div>
 
   <div class="install-option">
-    <h3>Or download a settings file</h3>
-    <p class="hint">Save this, then drag it onto
+    <h3>Other things you can do</h3>
+    <p class="hint">Save your settings as a file, then drag it onto
        <a href="https://github.com/OktaneZA/ESP32Departures/releases/latest" target="_blank" rel="noopener"><code>DepartureBuddyInstaller.exe</code></a>.
-       It flashes the board and applies these settings.</p>
+       It flashes the board and applies them — the desktop equivalent of both
+       steps above.</p>
     <button type="button" id="btnDownload">Download settings file</button>
     <p class="hint secrets-warning">Heads up: this file contains your WiFi password in
        plain text, so it can set the board up without you retyping anything. Keep it

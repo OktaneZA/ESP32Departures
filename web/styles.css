@@ -217,6 +217,38 @@ input[type=color] {
 .ptab.on { color: var(--text); border-color: var(--accent); }
 
 /* --- install -------------------------------------------------------------- */
+.install-lead {
+  margin: 0 0 18px;
+  font-size: 0.9rem;
+  color: var(--dim);
+}
+.install-lead strong { color: var(--text); }
+
+/* The two numbered actions. A board needs either one or both depending on
+   whether it has ever been flashed, and the numbering is what makes that
+   choice legible without reading a paragraph first. */
+.install-step {
+  display: flex;
+  gap: 14px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.install-step:first-of-type { border-top: 0; padding-top: 0; }
+.step-num {
+  display: grid;
+  place-items: center;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #1a1200;
+  font-size: 0.85rem;
+  font-weight: 700;
+  flex: none;
+  margin-top: 6px;
+}
+.install-step-body { flex: 1; min-width: 0; }
+.install-step-body .hint { margin: 8px 0 0; }
+
 .install-option {
   padding: 16px 0;
   border-top: 1px solid var(--line);
