@@ -94,7 +94,14 @@ String escapeParam(const String& in) {
 
 namespace bus {
 
+// Pick the provider. Anything but "national" is TfL, so a board provisioned
+// before providers existed keeps the London feed without being told to.
 Fetch fetchArrivals(const Config& cfg, std::vector<BusArrival>& out, String& stopName) {
+    return cfg.bus_national() ? fetchNational(cfg, out, stopName)
+                              : fetchTfl(cfg, out, stopName);
+}
+
+Fetch fetchTfl(const Config& cfg, std::vector<BusArrival>& out, String& stopName) {
     if (WiFi.status() != WL_CONNECTED) return Fetch::Failed;
     if (cfg.bus_stop.isEmpty()) return Fetch::Failed;
 

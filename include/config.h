@@ -12,8 +12,12 @@ struct Config {
     String dest_crs;     // optional destination filter CRS ("" = all)
     String platform;     // optional platform filter ("" = all)
     String tz;           // POSIX TZ string ("" = firmware default, UK)
-    String bus_stop;     // optional TfL bus stop SMS code ("" = bus screen off)
+    String bus_stop;     // stop id ("" = bus screen off). TfL: 5-digit SMS code.
+                         // National: NaPTAN ATCO code, e.g. "370023135".
     String bus_line;     // optional bus route filter, e.g. "38" ("" = all routes)
+    String bus_prov;     // "" or "tfl" = TfL Countdown, "national" = TransportAPI
+    String bus_id;       // TransportAPI app_id  (national only)
+    String bus_key;      // TransportAPI app_key (national only)
     String river_pier;   // optional TfL pier Naptan, e.g. "930GCAW" ("" = off)
     String river_line;   // optional river route filter, e.g. "RB1" ("" = all)
     String river_name;   // friendly pier name from the installer, e.g. "Canary Wharf Pier"
@@ -94,9 +98,17 @@ struct Config {
         return wants_train() && api_key.length() && dep_crs.length();
     }
 
-    // The TfL feeds need no key of their own, so a stop code / pier ID is the
-    // only setting the bus and river screens require.
-    bool bus_enabled() const { return wants_bus() && bus_stop.length(); }
+    // Which bus feed to use. Anything other than "national" means TfL, so a
+    // board provisioned before providers existed keeps the London feed.
+    bool bus_national() const { return bus_prov == "national"; }
+
+    // The TfL feed needs no key of its own, so a stop code is all the bus screen
+    // requires. TransportAPI needs both halves of its credential, and a stop
+    // with no way to ask about it would put an empty screen in the rotation.
+    bool bus_enabled() const {
+        if (!wants_bus() || !bus_stop.length()) return false;
+        return bus_national() ? (bus_id.length() && bus_key.length()) : true;
+    }
     bool river_enabled() const { return wants_river() && river_pier.length(); }
 
     // The clock needs nothing but the wish for it.
@@ -129,10 +141,19 @@ struct Config {
     // and `fallback` becomes a floor so a generous allowance can never make the
     // board poll faster than the upstream cache is worth.
     int bus_interval(int fallback) const {
-        if (bus_budget <= 0) return fallback;
-        int secs = on_hours() * 3600 / bus_budget;
+        int budget = bus_budget;
+        // A metered provider with no allowance provisioned must not fall through
+        // to the unmetered interval: 30s against TransportAPI's free tier spends
+        // the whole day in a quarter of an hour. Assume the smallest plan that
+        // exists, which is the one an unconfigured board is most likely on.
+        if (budget <= 0 && bus_national()) budget = kFreeTierBudget;
+        if (budget <= 0) return fallback;
+        int secs = on_hours() * 3600 / budget;
         return secs > fallback ? secs : fallback;
     }
+
+    // TransportAPI's free plan, and the floor this assumes when nobody said.
+    static constexpr int kFreeTierBudget = 30;
 
     // Usable once there is WiFi and at least one service to show. A river-only
     // board is fully provisioned with no API key and no station at all, and a

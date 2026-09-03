@@ -13,13 +13,20 @@ enum class Fetch {
     BadStop,  // the stop code is unknown to TfL (HTTP 416) — a config error
 };
 
-// Fetch live bus/river-bus arrivals for the configured stop from TfL's
-// Countdown (URA) feed. The feed is open — no API key — so `cfg.bus_stop`
-// (the stop's 5-digit SMS code) is the only thing required.
+// Fetch live bus arrivals for the configured stop, from whichever provider
+// `cfg.bus_prov` selects — TfL's keyless Countdown feed in London, TransportAPI
+// anywhere else. Both fill the same BusArrival, so nothing above this line
+// (the rotation, the renderer, the staleness logic) knows which one ran.
 //
 // On Ok: fills `out` with up to MAX_BUS_ARRIVALS arrivals sorted soonest-first,
-// each `etaSeconds` measured against TfL's own response timestamp, and sets
-// `stopName`. On Failed/BadStop: leaves outputs untouched so stale data persists.
+// each `etaSeconds` measured against the provider's own response timestamp
+// rather than the board's clock, and sets `stopName`. On Failed/BadStop: leaves
+// outputs untouched so stale data persists.
 Fetch fetchArrivals(const Config& cfg, std::vector<BusArrival>& out, String& stopName);
+
+// The two providers. Call fetchArrivals() rather than these directly; they are
+// declared here only so each can live in its own translation unit.
+Fetch fetchTfl(const Config& cfg, std::vector<BusArrival>& out, String& stopName);
+Fetch fetchNational(const Config& cfg, std::vector<BusArrival>& out, String& stopName);
 
 }  // namespace bus
