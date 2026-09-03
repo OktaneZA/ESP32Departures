@@ -140,7 +140,7 @@ system via the "URA" instant interface, documented in
 | **Protocol** | HTTPS. The body is **JSON-like but not a JSON document**: one JSON array per line, newline-separated |
 | **Authentication** | **None** — the instant feed is open, no key or registration. (The *streaming* interface needs Digest auth and is not used) |
 | **Data returned** | Route, destination, absolute arrival time (Unix epoch **milliseconds**, UTC) |
-| **Coverage** | London buses and TfL river bus piers only |
+| **Coverage** | Buses UK-wide (TfL in London, TransportAPI elsewhere); TfL river bus piers only |
 | **Freshness** | Refreshed at source every 30 s and cached 30 s; the spec states there is no benefit to polling faster |
 | **Prediction horizon** | The next 30 minutes |
 | **Attribution** | "Data provided by Transport for London". Applications must not carry TfL branding or imply they are official TfL apps |
@@ -240,6 +240,19 @@ itself never calls them:
 | BUS-18 | A provider that meters requests **per day** rather than per second is paced from a daily allowance (`busbudget`): the interval is that allowance divided evenly across the hours the screen is on, floored at `BUS_REFRESH_SECONDS`. `busbudget = 0` means unmetered and leaves the fixed interval exactly as it was, which is what the keyless TfL feed uses |
 | BUS-19 | A metered feed does **not** poll during blank hours. The allowance is divided across on-hours precisely so none of it is spent on a dark screen; the deferred deadline sits in the past overnight, so the first poll after the screen wakes is immediate |
 | BUS-20 | On a metered feed a **failed** attempt also costs a request, so the exponential back-off and the unknown-stop retry are both floored at the budgeted interval — a flaky network cannot spend the day's allowance on retries |
+| BUS-21 | `busprov` selects the feed: `tfl` (default) or `national`. Anything other than `national` means TfL, so a board provisioned before providers existed keeps the London feed without being reconfigured |
+| BUS-22 | The national feed is TransportAPI's `/bus/stop_timetables/{ATCO}.json`. The older `/bus/stop/{atco}/live.json` answers **301** to it, and following a redirect would spend two requests out of a thirty-a-day allowance, so the canonical URL is pinned |
+| BUS-23 | Redirect following is **disabled** on the national client. Its credentials travel in the query string, so a redirect would forward them to wherever it pointed |
+| BUS-24 | `group=false` and a `limit` are requested. Grouped by route a two-route stop returned 17.8 KB; flat and limited it is under 5 KB, inside `BUS_MAX_RESPONSE` |
+| BUS-25 | `best_departure_estimate` is the time used: it is the live estimate where there is one and the timetabled time where there is not, so it is always both present and correct. Countdowns are measured against the response's own `request_time` |
+| BUS-26 | Departure times carry no date, so the midnight wrap is handled **in both directions** — a departure just after midnight seen from before it, and one just before midnight running late seen from after it |
+| BUS-27 | Cancelled departures (`status.cancellation.value`) are dropped; the route filter is applied client-side, the feed having no per-line parameter |
+| BUS-28 | An unknown ATCO code answers **400** (`A stop with code X doesn't exist`), not 404. 400/401/403/404 are all treated as configuration errors — the screen is withheld rather than retried at the failure cadence |
+| BUS-29 | The national error body is **never logged**: it quotes the `app_id` back, and the serial log is the one place a credential must not appear |
+| BUS-30 | A national board with no `busbudget` provisioned assumes the free tier (30/day) rather than falling through to the unmetered interval, which would spend a day's allowance in a quarter of an hour |
+| BUS-31 | National stops are found through **OpenStreetMap (Overpass)**, which is keyless, CORS-open, supports a radius query and carries `naptan:AtcoCode`. TransportAPI's own `/bus/stops/near.json` is not on the free plan (403), and bustimes.org silently ignores `bbox`, latitude/longitude and `search` alike — a London bounding box returned stops in Downpatrick and Las Vegas |
+| BUS-32 | Stops with no ATCO code cannot be asked about and are not offered. Measured coverage: 40/40 in Sheffield and Truro, 39/45 in rural Northumberland and Wales |
+| BUS-33 | Changing provider **clears the stored stop**: a TfL SMS code means nothing to TransportAPI and an ATCO code nothing to TfL |
 
 ---
 
@@ -332,6 +345,9 @@ setup" having silently lost its WiFi, API key and station.
 | `mode` | No | `train,bus` | Comma-separated set of services to show, e.g. `train,bus,river` |
 | `bus` | No | - | TfL bus stop SMS code (empty = no bus screen at all) |
 | `busline` | No | - | Bus route filter, e.g. `38` (empty = every route at the stop) |
+| `busprov` | No | `tfl` | Which bus feed: `tfl` (keyless, London) or `national` (TransportAPI, UK-wide) |
+| `busid` | No | - | TransportAPI `app_id`, national only. Not a secret, and reported by `GET` |
+| `buskey` | No | - | TransportAPI `app_key`, national only. **Secret** — reported only as `buskeylen` |
 | `busbudget` | No | `0` | Requests per day the bus feed may spend. `0` = unmetered (TfL). Any positive value paces polling to fit: the allowance spread evenly across the hours the screen is on (BUS-18) |
 | `river` | No | - | TfL pier Naptan **port** ID, e.g. `930GCAW` (empty = no river screen at all) |
 | `riverline` | No | - | River route filter, e.g. `RB1` (empty = every route at the pier) |
@@ -420,10 +436,10 @@ Newline-terminated line protocol on the USB CDC serial port (`src/config.cpp`).
 | PROV-01 | `PING` → `PONG Departure Buddy` (discovery/handshake). The installer matches the bare `PONG` token, never the product name after it, so the banner is informational — a rename does not stop a new installer recognising an old board, or an old installer a new one |
 | PROV-02 | `CFG <key>=<value>` → `ACK <key>` (stages a value) |
 | PROV-03 | `COMMIT` → `SAVED`, then the device saves to NVS and reboots |
-| PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `busbudget`, `busevery`, `river`, `riverline`, `rivername`, `mode`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
+| PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `busprov`, `busid`, `buskeylen`, `busbudget`, `busevery`, `river`, `riverline`, `rivername`, `mode`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
 | PROV-05 | Protocol available whether provisioned or not, so reconfiguration always works |
 | PROV-06 | Host opens serial with `dtr=True, rts=False` to avoid resetting the ESP32-S3 |
-| PROV-07 | `GET` never returns a secret: the API key is not reported at all and the WiFi password only as `passlen` (its length), which distinguishes an empty or truncated password from a wrong one |
+| PROV-07 | `GET` never returns a secret: the rail API key is not reported at all, the WiFi password only as `passlen` and the TransportAPI `app_key` only as `buskeylen` — a length distinguishes an empty or truncated credential from a wrong one. The `app_id` *is* reported: it grants nothing alone, and it identifies which account a board is spending the quota of |
 | PROV-08 | `SCAN` → one `SSID|rssi=|ch=|auth=` line per visible network, then `END`. The ESP32-S3 has no 5 GHz radio, so a network missing here but visible on a phone is the usual explanation for a board that will not connect |
 | PROV-09 | A `COMMIT` stages on top of the current config, so **omitting** a key preserves its stored value — the mechanism INST-11 relies on to avoid retyping secrets |
 | PROV-10 | `GET` reports a legacy `mode` as the set it means (`train,bus`), so the installer only ever has to understand the comma-separated form |

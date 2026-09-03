@@ -72,8 +72,14 @@ by the flasher, which is precisely the contents of `firmware.bin`.
 ## Secrets
 
 - Your WiFi password and API keys are stored in the board's NVS and **never
-  reported back**: `GET` returns the password only as `passlen`, and the API key
-  not at all.
+  reported back**: `GET` returns the password only as `passlen`, the rail API key
+  not at all, and the TransportAPI `app_key` only as `buskeylen`. The matching
+  `app_id` *is* reported, deliberately — on its own it grants nothing, and
+  seeing it is how you tell which account a board is spending the quota of.
+- **Credentials never travel to an unverified server.** The TransportAPI request
+  carries a key in its query string, so that client verifies TLS like the rest
+  *and* refuses to follow redirects — the canonical URL is pinned, and a
+  redirect would hand the key to wherever it pointed.
 - The setup page is **static and runs entirely in your browser**. What you type
   goes down the USB cable, not to a server. There is no analytics, no telemetry
   and no backend to leak.

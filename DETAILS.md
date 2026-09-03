@@ -120,6 +120,14 @@ ESP32Departures/
   root CA and switch to `client.setCACert(...)` (a hook is already in place).
 - **Calling points** arrive in the same response but aren't shown in the current
   top-three layout (`FETCH_CALLING_POINTS 0`).
+- **Buses outside London** come from
+  [TransportAPI](https://developer.transportapi.com/), the one source that
+  answers "what is next at this stop" nationally. It meters by the day rather
+  than the second, so the board divides its allowance evenly across the hours
+  the screen is on and spends nothing overnight. Stops are found through
+  OpenStreetMap, which carries the ATCO codes TransportAPI indexes by —
+  TransportAPI's own stop search is not on the free plan, and bustimes.org has
+  no spatial search at all.
 - **London buses** come from TfL's
   [Live Bus & River Bus Arrivals API](https://content.tfl.gov.uk/tfl-live-bus-river-bus-arrivals-api-documentation.pdf)
   (the Countdown "URA" feed), which needs no key. Its responses are one JSON

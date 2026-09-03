@@ -7,6 +7,9 @@
 //   countdown.api.tfl.gov.uk    Access-Control-Allow-Origin: *
 //   api.postcodes.io            Access-Control-Allow-Origin: *
 //   api1.raildata.org.uk        reflects the requesting origin
+//   overpass-api.de             Access-Control-Allow-Origin: *
+//   transportapi.com            Access-Control-Allow-Origin: * (on 200 and 403,
+//                               so a key can be checked before any hardware is)
 //
 // These are ports of the equivalents in installer.py. Behaviour is kept
 // identical on purpose: the page and the .exe must resolve a given search to
@@ -178,6 +181,137 @@ export async function busArrivals(code, lineFilter = '') {
   }
   rows.sort((x, y) => x.mins - y.mins);
   return { status: 'ok', rows };
+}
+
+// --- buses outside London ---------------------------------------------------
+//
+// TfL's feed stops at the M25, and the picker above with it. Two different
+// sources are needed out here, for a reason worth recording:
+//
+//   * TransportAPI serves the departures, but its own /bus/stops/near.json is
+//     403 "not part of your plan" on the free tier, so it cannot find stops.
+//   * bustimes.org has stop data but no spatial search at all: it silently
+//     ignores bbox, latitude/longitude/distance and search, and answered a
+//     London bounding box with stops in Downpatrick and Las Vegas. Only exact
+//     atco_code lookup is honoured, which is a lookup, not a picker.
+//
+// So stops come from Overpass (OpenStreetMap), which is keyless, CORS-open, has
+// a real radius query, and carries naptan:AtcoCode — the identifier TransportAPI
+// wants. Measured coverage: 40/40 stops in Sheffield and Truro, 39/45 in rural
+// Northumberland and Wales. Stops without an ATCO simply cannot be asked about,
+// so they are dropped rather than offered.
+
+const OVERPASS = 'https://overpass-api.de/api/interpreter';
+const TRANSPORTAPI = 'https://transportapi.com/v3/uk';
+
+// Bus stops within `radiusM` of a point, nearest first. Same shape as
+// stopsNear() so the picker UI does not care which provider filled it.
+export async function nationalStopsNear(lat, lon, radiusM) {
+  const q = `[out:json][timeout:25];node(around:${Math.round(radiusM)},`
+    + `${lat.toFixed(6)},${lon.toFixed(6)})["highway"="bus_stop"];out body 60;`;
+  // Overpass wants the query as a form body. That keeps it a simple request
+  // with no preflight, the same constraint every other call here works under.
+  const r = await fetch(OVERPASS, {
+    method: 'POST',
+    body: new URLSearchParams({ data: q }),
+  });
+  if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
+  const d = await r.json();
+  const stops = [];
+  for (const el of d.elements || []) {
+    const t = el.tags || {};
+    const atco = t['naptan:AtcoCode'];
+    if (!atco || el.lat == null) continue;
+    stops.push({
+      code: String(atco),
+      name: plain(t.name || t['naptan:CommonName'] || String(atco)),
+      // OSM records which way the stop faces; the nearest thing it has to
+      // TfL's "Towards", and the only hint of direction available out here.
+      towards: t.bearing ? `heading ${t.bearing}` : '',
+      indicator: plain(t['naptan:Indicator'] || t.local_ref || ''),
+      lat: Number(el.lat),
+      lon: Number(el.lon),
+      distance: haversineM(lat, lon, Number(el.lat), Number(el.lon)),
+    });
+  }
+  stops.sort((a, b) => a.distance - b.distance);
+  return stops;
+}
+
+// UK-wide place lookup. geocodePlace() above is TfL's index and so is London
+// only; postcodes.io covers the whole country and is already trusted here for
+// postcodes, which keeps the origin list short.
+export async function geocodePlaceUK(query) {
+  const url = 'https://api.postcodes.io/places?limit=5&q=' + encodeURIComponent(query);
+  try {
+    const d = await getJson(url);
+    return (d.result || [])
+      .filter((p) => p.latitude != null)
+      .map((p) => ({ name: plain(p.name_1 || query), lat: +p.latitude, lon: +p.longitude }));
+  } catch { return []; }
+}
+
+// The national twin of findStops(). A wider radius than London's 250-500m:
+// stops are much further apart outside a city, and an empty list is a worse
+// answer than a slightly long one.
+export async function findNationalStops(search) {
+  const q = search.trim();
+  if (POSTCODE_RE.test(q)) {
+    const point = await geocodePostcode(q);
+    if (!point) return { stops: [], label: q.toUpperCase() };
+    return { stops: await nationalStopsNear(point[0], point[1], 800), label: q.toUpperCase() };
+  }
+  const matches = await geocodePlaceUK(q);
+  if (!matches.length) return { stops: [], label: q };
+  const m = matches[0];
+  return { stops: await nationalStopsNear(m.lat, m.lon, 800), label: m.name };
+}
+
+// Live departures at an ATCO stop: (status, rows). Status is
+// 'ok' | 'bad_stop' | 'bad_key' | 'net'. Mirrors bus_national.cpp exactly — same
+// canonical endpoint, same best_departure_estimate, same midnight handling — so
+// the preview here and the board agree.
+export async function nationalArrivals(atco, appId, appKey, lineFilter = '') {
+  const url = `${TRANSPORTAPI}/bus/stop_timetables/${encodeURIComponent(atco)}.json`
+    + `?app_id=${encodeURIComponent(appId)}&app_key=${encodeURIComponent(appKey)}`
+    + '&group=false&live=true&limit=12';
+  let d;
+  try {
+    d = await getJson(url);
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) return { status: 'bad_key', rows: [] };
+    // An unknown stop code answers 400 ("A stop with code X doesn't exist"),
+    // not 404. The only variable in the URL is the stop, so 400 means just that.
+    if (e.status === 400 || e.status === 404) return { status: 'bad_stop', rows: [] };
+    return { status: 'net', rows: [] };
+  }
+
+  const mod = (s, off) => {
+    const m = /^(\d{2}):(\d{2})/.exec(String(s || '').slice(off));
+    if (!m) return -1;
+    const h = +m[1], mi = +m[2];
+    return h > 23 || mi > 59 ? -1 : h * 60 + mi;
+  };
+  const now = mod(d.request_time, 11);
+  if (now < 0) return { status: 'net', rows: [] };
+
+  const rows = [];
+  for (const x of (d.departures || {}).all || []) {
+    if (x.status?.cancellation?.value) continue;
+    const line = String(x.line_name || '');
+    if (!line) continue;
+    if (lineFilter && line.toLowerCase() !== lineFilter.toLowerCase()) continue;
+    const dep = mod(x.best_departure_estimate, 0);
+    if (dep < 0) continue;
+    let mins = dep - now;
+    if (mins < -60) mins += 1440;            // departure is tomorrow
+    else if (mins > 1440 - 60) mins -= 1440; // departure was yesterday, running late
+    if (mins < 0) mins = 0;
+    if (mins > 30) continue;
+    rows.push({ line, dest: plain(String(x.direction || '')), mins });
+  }
+  rows.sort((a, b) => a.mins - b.mins);
+  return { status: 'ok', rows, stopName: plain(d.stop_name || d.name || '') };
 }
 
 // --- river ------------------------------------------------------------------

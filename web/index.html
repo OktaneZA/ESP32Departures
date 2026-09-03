@@ -108,11 +108,47 @@
 
   <!-- Buses -->
   <div class="svc" id="svc-bus" hidden>
-    <h3>London buses</h3>
+    <h3>Buses</h3>
+    <div class="field">
+      <label for="busProv">Where is your stop?</label>
+      <select id="busProv" autocomplete="off">
+        <option value="tfl">London — free, nothing to sign up for</option>
+        <option value="national">Anywhere else in the UK — needs a TransportAPI key</option>
+      </select>
+      <p class="hint" id="busProvHint">TfL publishes London arrivals openly, so a London
+         board needs no account and refreshes every 30 seconds.</p>
+    </div>
+
+    <!-- TransportAPI credentials. Shown only outside London, and asked before
+         the stop because the stop picker needs somewhere to search from. -->
+    <div id="busNational" hidden>
+      <div class="field">
+        <label for="busid">TransportAPI app_id</label>
+        <input id="busid" type="text" autocomplete="off" placeholder="8 characters, e.g. a1b2c3d4">
+      </div>
+      <div class="field">
+        <label for="buskey">TransportAPI app_key</label>
+        <input id="buskey" type="password" autocomplete="off" placeholder="32 characters">
+        <p class="hint">Free from <a href="https://developer.transportapi.com/signup" target="_blank" rel="noopener">developer.transportapi.com</a>
+           — see <a href="https://github.com/OktaneZA/ESP32Departures/blob/main/docs/transportapi-key.md" target="_blank" rel="noopener">the step-by-step guide</a>.
+           <button type="button" class="link" id="busKeyCheck">Check these work</button></p>
+        <p class="chosen" id="busKeyStatus" hidden></p>
+      </div>
+      <div class="field">
+        <label for="busbudget">Your plan’s daily allowance</label>
+        <select id="busbudget" autocomplete="off">
+          <option value="30">Free — 30 requests a day</option>
+          <option value="300">Home use — 300 a day (£5/month)</option>
+          <option value="1000">Commercial trial — 1000 a day</option>
+        </select>
+        <p class="hint" id="busBudgetHint"></p>
+      </div>
+    </div>
+
     <div class="field">
       <label for="busSearch">Your stop</label>
       <input id="busSearch" type="text" autocomplete="off" placeholder="Postcode, place name, or the 5-digit code on the stop">
-      <p class="hint">Try a postcode (<code>SW19 7NL</code>), a place (<code>Green Park Station</code>),
+      <p class="hint" id="busSearchHint">Try a postcode (<code>SW19 7NL</code>), a place (<code>Green Park Station</code>),
          or the stop’s own code. <button type="button" class="link" id="busGo">Search</button></p>
       <div id="busResults" class="results"></div>
       <p class="chosen" id="busChosen" hidden></p>

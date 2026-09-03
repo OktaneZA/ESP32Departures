@@ -111,10 +111,14 @@ Fetch fetchNational(const Config& cfg, std::vector<BusArrival>& out, String& sto
         // back, and the serial log is the one place a key must not appear.
         Serial.printf("[bus/national] HTTP %d\n", code);
         http.end();
-        // 401/403 is a rejected or out-of-quota key and 404 an unknown stop.
-        // None of those fix themselves, so all are treated as config errors
-        // rather than being retried at the failure cadence.
-        if (code == 401 || code == 403 || code == 404) { return Fetch::BadStop; }
+        // 401/403 is a rejected or out-of-quota key; an unknown stop code comes
+        // back as 400 ("A stop with code X doesn't exist"), not 404. None of
+        // those fix themselves, so all are treated as config errors rather than
+        // being retried at the failure cadence. The only variable in the URL is
+        // the stop, so a 400 here can mean nothing else.
+        if (code == 400 || code == 401 || code == 403 || code == 404) {
+            return Fetch::BadStop;
+        }
         return Fetch::Failed;
     }
 

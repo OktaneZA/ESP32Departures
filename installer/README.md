@@ -2,7 +2,7 @@
 
 A self-contained **Windows 10/11** installer for the LilyGo T-Display-S3 departure
 board. It flashes the firmware and configures it (WiFi, National Rail LDBWS key,
-station, filters, an optional London bus stop, an optional Thames pier, blank
+station, filters, an optional bus stop anywhere in the UK, an optional Thames pier, blank
 hours, brightness) over USB — **no Python, PlatformIO, or toolchain needed** on
 the target PC.
 
@@ -78,12 +78,13 @@ should actually show.
 - Timezone — **auto-detected from your PC's locale** (just press Enter to accept)
 
 **Part 2 — what the board shows**
-- **Which services** — trains, London buses, river boats, or any combination.
+- **Which services** — trains, buses, river boats, or any combination.
   You pick them from a list (`1,3` for trains and boats), and are then asked
   only for what those need
 - *(trains)* LDBWS API key (your consumer key from [raildata.org.uk](https://raildata.org.uk))
 - *(trains)* Departure station CRS (e.g. `MOT`), optional destination + platform filters
-- *(buses)* Your London bus stop (see below)
+- *(buses)* Where your stop is, credentials if it is outside London, then the
+  stop itself (see below)
 - *(boats)* Your Thames pier (see below)
 
 > **Finding your station's CRS code:** it's the 3-letter code for your station
@@ -97,24 +98,39 @@ up front. (This check is skipped if you kept the board's existing key, since it
 has no key to check with; the board itself then shows an "Unknown station" screen
 rather than a blank error.)
 
-## Adding a London bus stop (optional)
+## Adding a bus stop (optional)
 
 Buses can be shown on their own, or alongside the trains. With both, the board
 cycles **trains for 30 seconds, then your bus stop for 15 seconds**, over and
-over. It uses TfL's open Countdown data, so there is **no extra API key to
-get** — but it only covers **London** buses (and TfL river bus piers).
+over.
 
-A **buses-only** board needs no API key and no station, so the wizard skips
-those prompts entirely — but it does require a stop, since otherwise there
-would be nothing to display.
+The installer first asks **where your stop is**, because that decides what else
+it needs:
+
+| | Feed | Key | Refresh |
+|---|---|---|---|
+| **London** | TfL Countdown | none — it is open data | every 30 seconds |
+| **Anywhere else in the UK** | TransportAPI | a free `app_id` + `app_key` | paced to your daily allowance |
+
+For a stop outside London, get the credentials first:
+**[Getting your bus data key](../docs/transportapi-key.md)**. TransportAPI meters
+by the day rather than the second, so the installer asks which plan you are on
+and tells you what that works out as — on the free tier (30/day) it is one
+update every 32 minutes, which is honest but slow for a bus. It checks the
+credentials before going any further.
+
+A **buses-only** board needs no train API key and no station, so the wizard
+skips those prompts entirely — but it does require a stop, since otherwise
+there would be nothing to display.
 
 Because you already chose buses in Part 2, the installer doesn't ask *whether*
 you want a stop — just which one. A single prompt finds it for you, so you don't
 need to know any codes. Type whichever you have and it works out which is which:
 
 - a **postcode** — `SW19 7NL`
-- a **place or stop name** — `Green Park Station`
-- the **5-digit code** printed on the stop itself — `52053`
+- a **place or stop name** — `Green Park Station`, `Hexham`
+- the stop's own code — the **5-digit** number on a London stop (`52053`), or
+  its **ATCO code** elsewhere (`370023135`)
 
 You then get a numbered list of nearby stops **with the direction each one
 serves**, so you can pick the right side of the road:
@@ -151,8 +167,13 @@ To turn the bus screen off later, re-run the installer, choose **Change
 settings**, and answer `n` to the bus question. (Pressing Enter at the stop
 search keeps the stop you already have.)
 
-> Buses outside London aren't covered — the feed is TfL's. Bus data provided by
-> Transport for London.
+> Outside London the stop list comes from OpenStreetMap, which carries the ATCO
+> codes TransportAPI indexes by. A stop you can see in real life but cannot find
+> in the list usually has no ATCO code recorded in OSM; the stop on the other
+> side of the road normally works.
+>
+> London bus data provided by Transport for London. National bus data by
+> TransportAPI.
 
 ## Adding a river boat pier (optional)
 
@@ -312,8 +333,8 @@ python installer.py --auto cfg.json
 ```
 
 where `cfg.json` has `port`, `flash`, and any of the settings keys
-(`ssid pass key dep dest plat tz bus busline busbudget river riverline rivername
-mode bstart bend bright refr`). `mode` is a comma-separated set — `train`, `bus`,
+(`ssid pass key dep dest plat tz bus busline busprov busid buskey busbudget
+river riverline rivername mode bstart bend bright refr`). `mode` is a comma-separated set — `train`, `bus`,
 `river`, or any combination such as `train,bus,river`. The older exclusive
 values (`both`, or a lone `train`/`bus`) are still accepted.
 
@@ -326,6 +347,12 @@ A key you **leave out** keeps whatever the board already has; pass an explicit
 
 `bus` is the stop's 5-digit code and `busline` an optional route filter; `"bus": ""`
 gives a train-only board.
+
+`busprov` picks the feed: `tfl` (keyless, London only) or `national`
+(TransportAPI, UK-wide). A national board also needs `busid` and `buskey`, and
+its `bus` value is a NaPTAN ATCO code (`370023135`) rather than a 5-digit SMS
+code. Changing provider means changing the stop too - the codes are not
+interchangeable. See [docs/transportapi-key.md](../docs/transportapi-key.md).
 
 `busbudget` is how many requests a day the bus feed may spend. Leave it `0` for
 TfL, which is keyless and uncapped and polls every 30 seconds. Set it to a

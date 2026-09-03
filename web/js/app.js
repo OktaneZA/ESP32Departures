@@ -162,19 +162,38 @@ function initTrains() {
 }
 
 // ──────────────────────────────── buses ──────────────────────────────────
+// True when the user is asking for a stop outside London, which is the only
+// case that needs a key, a different picker and a paced refresh.
+function national() { return ui.busprov === 'national'; }
+
 function initBuses() {
   const box = $('busSearch');
   const go = async () => {
     const q = box.value.trim();
     const out = $('busResults');
     if (!q) return;
+    if (national() && !(ui.busid && ui.buskey)) {
+      out.innerHTML = '<p class="hint">Enter your TransportAPI app_id and app_key first —'
+        + ' outside London the stop list needs them to show what is due.</p>';
+      return;
+    }
     out.innerHTML = '<p class="hint">Searching…</p>';
 
-    // A bare stop code needs no search — check it and take it as given.
-    if (/^\d+$/.test(q)) {
-      const { status } = await api.busArrivals(q);
+    // A bare stop code needs no search — check it and take it as given. Only
+    // London codes are all digits; an ATCO code is longer and usually mixed,
+    // so outside London this recognises the ATCO form instead.
+    const bare = national() ? /^[0-9A-Za-z]{8,14}$/.test(q) && /\d/.test(q)
+                            : /^\d+$/.test(q);
+    if (bare) {
+      const { status } = national()
+        ? await api.nationalArrivals(q, ui.busid, ui.buskey)
+        : await api.busArrivals(q);
+      if (status === 'bad_key') {
+        out.innerHTML = '<p class="hint">Those TransportAPI credentials were rejected.</p>';
+        return;
+      }
       if (status === 'bad_stop') {
-        out.innerHTML = `<p class="hint">TfL doesn’t know stop code ${escapeHtml(q)}.</p>`;
+        out.innerHTML = `<p class="hint">No stop found with the code ${escapeHtml(q)}.</p>`;
         return;
       }
       out.innerHTML = '';
@@ -182,9 +201,10 @@ function initBuses() {
       return;
     }
 
-    const { stops, label } = await api.findStops(q);
+    const { stops, label } = national() ? await api.findNationalStops(q)
+                                        : await api.findStops(q);
     if (!stops.length) {
-      out.innerHTML = `<p class="hint">No London bus stops found for “${escapeHtml(label)}”.
+      out.innerHTML = `<p class="hint">No bus stops found for “${escapeHtml(label)}”.
         Try a postcode, or a nearby landmark.</p>`;
       return;
     }
@@ -194,7 +214,8 @@ function initBuses() {
       b.type = 'button';
       b.className = 'result';
       const ind = s.indicator ? ` (${escapeHtml(s.indicator)})` : '';
-      const towards = s.towards ? `towards ${escapeHtml(s.towards)}` : 'hail &amp; ride';
+      const towards = s.towards ? escapeHtml(s.towards)
+                                : (national() ? '' : 'hail &amp; ride');
       b.innerHTML = `${escapeHtml(s.name)}${ind}
         <span class="meta">${Math.round(s.distance)}m · ${towards}</span>`;
       b.onclick = () => { out.innerHTML = ''; chooseStop(s); };
@@ -208,6 +229,81 @@ function initBuses() {
   $('busGo').onclick = go;
   box.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
   $('busline').oninput = () => { ui.busline = $('busline').value.trim(); render(); };
+
+  const prov = $('busProv');
+  prov.onchange = () => {
+    ui.busprov = prov.value;
+    // The stop belongs to the provider that found it: a TfL SMS code means
+    // nothing to TransportAPI and an ATCO code nothing to TfL, so switching
+    // has to clear it rather than carry across a code that cannot work.
+    ui.bus = ''; ui.busName = ''; ui.busPreview = [];
+    $('busChosen').hidden = true;
+    $('busResults').innerHTML = '';
+    box.value = '';
+    syncBusProvider();
+    render();
+  };
+  $('busid').oninput = () => { ui.busid = $('busid').value.trim(); render(); };
+  $('buskey').oninput = () => { ui.buskey = $('buskey').value.trim(); render(); };
+  $('busbudget').onchange = () => {
+    ui.busbudget = Number($('busbudget').value);
+    syncBusProvider();
+    render();
+  };
+  $('busKeyCheck').onclick = checkBusKey;
+  syncBusProvider();
+}
+
+// Show the right half of the bus panel, and say plainly what the chosen
+// allowance actually buys — the arithmetic is the firmware's (BUS-18), and
+// hiding it is how someone ends up disappointed by a 32-minute refresh.
+function syncBusProvider() {
+  const isNat = national();
+  $('busNational').hidden = !isNat;
+  $('busProv').value = ui.busprov || 'tfl';
+  $('busSearch').placeholder = isNat
+    ? 'Postcode, town or village name, or the stop’s ATCO code'
+    : 'Postcode, place name, or the 5-digit code on the stop';
+  $('busProvHint').textContent = isNat
+    ? 'TransportAPI covers the whole UK, but meters requests by the day, so the board'
+      + ' paces itself to fit your allowance.'
+    : 'TfL publishes London arrivals openly, so a London board needs no account'
+      + ' and refreshes every 30 seconds.';
+  if (isNat) {
+    const onHours = hoursOn();
+    const every = Math.max(30, Math.floor((onHours * 3600) / (ui.busbudget || 30)));
+    const mins = (every / 60).toFixed(1);
+    $('busbudget').value = String(ui.busbudget || 30);
+    $('busBudgetHint').textContent =
+      `Spread over the ${onHours} hours a day your screen is on, that is one update `
+      + `every ${mins} minutes. Nothing is spent overnight.`
+      + (every > 900 ? ' At that rate a bus can come and go between updates.' : '');
+  }
+}
+
+// The hours the screen is on, matching Config::on_hours() on the board.
+function hoursOn() {
+  if (ui.onHour < 0 || ui.offHour < 0 || ui.onHour === ui.offHour) return 24;
+  let blank = ui.onHour - ui.offHour;
+  if (blank < 0) blank += 24;
+  return blank <= 0 || blank >= 24 ? 24 : 24 - blank;
+}
+
+// Validate the credentials against a stop we know exists, before the user has
+// spent any time picking their own. CORS is open on the 403 as well as the 200,
+// so a wrong key gives a real answer rather than an opaque network error.
+async function checkBusKey() {
+  const el = $('busKeyStatus');
+  el.hidden = false;
+  if (!(ui.busid && ui.buskey)) { el.textContent = 'Enter both values first.'; return; }
+  el.textContent = 'Checking…';
+  const { status } = await api.nationalArrivals('370023135', ui.busid, ui.buskey);
+  el.textContent = {
+    ok: 'Working — these credentials are good.',
+    bad_key: 'Rejected. Check the app_id and app_key, and that your plan is active.',
+    bad_stop: 'The credentials work, but the test stop was not found.',
+    net: 'Could not reach TransportAPI. Check your connection and try again.',
+  }[status];
 }
 
 async function chooseStop(stop) {
@@ -218,7 +314,9 @@ async function chooseStop(stop) {
   el.hidden = false;
   el.textContent = `Showing ${stop.name} (${stop.code}). Checking what’s due…`;
   render();
-  const { status, rows } = await api.busArrivals(stop.code, ui.busline);
+  const { status, rows } = national()
+    ? await api.nationalArrivals(stop.code, ui.busid, ui.buskey, ui.busline)
+    : await api.busArrivals(stop.code, ui.busline);
   el.textContent = status !== 'ok'
     ? `Showing ${stop.name} (${stop.code}).`
     : rows.length
@@ -435,6 +533,8 @@ function problems() {
   if (ui.services.includes('train') && !ui.dep) out.push('A station, or turn trains off.');
   if (ui.services.includes('train') && !ui.key) out.push('A National Rail API key, or turn trains off.');
   if (ui.services.includes('bus') && !ui.bus) out.push('A bus stop, or turn buses off.');
+  if (ui.services.includes('bus') && national() && !(ui.busid && ui.buskey))
+    out.push('Your TransportAPI app_id and app_key, for buses outside London.');
   if (ui.services.includes('river') && !ui.river) out.push('A pier, or turn river boats off.');
   if (ui.services.includes('weather') && ui.wxLat === null) {
     out.push('Somewhere to show the weather for — pick a station, stop or pier above.');

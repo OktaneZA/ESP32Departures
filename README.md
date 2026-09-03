@@ -16,7 +16,7 @@ Pick any combination and the board cycles through them.
 | | |
 |---|---|
 | **Trains** | Anywhere in the UK, from National Rail |
-| **London buses** | Any stop, live from TfL |
+| **Buses** | Any London stop live from TfL, free and keyless. Anywhere else in the UK via [TransportAPI](docs/transportapi-key.md), which needs a free key |
 | **River boats** | Uber Boat by Thames Clippers and the Woolwich Ferry |
 | **Weather** | Right where your stop is — no extra setup |
 | **A big clock** | The time, filling the screen |

@@ -11,7 +11,7 @@
 // them. See config.cpp's `stage_kv`.
 export const KEYS = [
   'ssid', 'pass', 'key', 'dep', 'dest', 'plat', 'tz',
-  'bus', 'busline', 'busbudget', 'river', 'riverline', 'rivername', 'mode',
+  'bus', 'busline', 'busprov', 'busid', 'buskey', 'busbudget', 'river', 'riverline', 'rivername', 'mode',
   'bstart', 'bend', 'bright', 'refr',
   'colfg', 'coldim', 'colwarn', 'colbg',
   'dwtrain', 'dwbus', 'dwriver', 'dwclock', 'dwwx',
@@ -22,7 +22,7 @@ export const KEYS = [
 // cycles screens in, so the UI must list them the same way.
 export const SERVICES = [
   { id: 'train', label: 'Trains', note: 'UK-wide, National Rail' },
-  { id: 'bus', label: 'London buses', note: 'TfL, London only' },
+  { id: 'bus', label: 'Buses', note: 'London free; elsewhere needs a TransportAPI key' },
   { id: 'river', label: 'River boats', note: 'Uber Boat by Thames Clippers + Woolwich Ferry' },
   { id: 'weather', label: 'Weather', note: 'For wherever you picked above — no extra setup' },
   { id: 'clock', label: 'Big clock', note: 'The time, filling the screen' },
@@ -99,6 +99,9 @@ export function defaultConfig() {
     ssid: '', pass: '', key: '', dep: '', dest: '', plat: '',
     tz: tz === 'Europe/London' ? 'GMT0BST,M3.5.0/1,M10.5.0' : '',
     bus: '', busline: '', river: '', riverline: '', rivername: '',
+    // Which bus feed, and the credentials the national one needs. TfL is the
+    // default because it is the one that needs no account at all.
+    busprov: 'tfl', busid: '', buskey: '',
     // Requests per day the bus feed may spend. 0 means unmetered, which is what
     // TfL's keyless feed is; a metered provider replaces this with its allowance
     // and the board paces itself to fit.
@@ -148,7 +151,12 @@ export function toDeviceConfig(ui) {
     tz: ui.tz || '',
     bus: pruned.includes('bus') ? ui.bus : '',
     busline: pruned.includes('bus') ? (ui.busline || '') : '',
-    busbudget: pruned.includes('bus') ? (ui.busbudget || 0) : 0,
+    busprov: pruned.includes('bus') ? (ui.busprov || 'tfl') : 'tfl',
+    // Credentials and an allowance only mean anything to the national feed, so
+    // a London board sends them empty rather than leaving a stale key on NVS.
+    busid: pruned.includes('bus') && ui.busprov === 'national' ? ui.busid : '',
+    buskey: pruned.includes('bus') && ui.busprov === 'national' ? ui.buskey : '',
+    busbudget: pruned.includes('bus') && ui.busprov === 'national' ? (ui.busbudget || 30) : 0,
     river: pruned.includes('river') ? ui.river : '',
     riverline: pruned.includes('river') ? (ui.riverline || '') : '',
     rivername: pruned.includes('river') ? (ui.rivername || '') : '',

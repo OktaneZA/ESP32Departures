@@ -38,7 +38,8 @@ ESPRESSIF_VID = 0x303A
 # already dropped settings on the floor twice.
 CONFIG_KEYS = (
     "ssid", "pass", "key", "dep", "dest", "plat", "tz",
-    "bus", "busline", "busbudget", "river", "riverline", "rivername", "mode",
+    "bus", "busline", "busprov", "busid", "buskey", "busbudget",
+    "river", "riverline", "rivername", "mode",
     "bstart", "bend", "bright", "refr",
     "colfg", "coldim", "colwarn", "colbg",
     "dwtrain", "dwbus", "dwriver", "dwclock", "dwwx",
@@ -306,11 +307,18 @@ def find_stops(search):
     return stops_near_any(origins, 250), label
 
 
-def choose_bus_stop(current="", required=False):
-    """Interactive stop finder. Returns the chosen 5-digit stop code, or ''."""
+def choose_bus_stop(current="", required=False,
+                    national=False, app_id="", app_key=""):
+    """Interactive stop finder. Returns the chosen stop code, or ''.
+
+    In London that is the 5-digit SMS code on the stop flag; outside it, the
+    NaPTAN ATCO code, which is what TransportAPI indexes by."""
     while True:
         print("\n  Where is your stop? Enter a postcode (e.g. 'SW19 7NL'), a place")
-        print("  name (e.g. 'Green Park Station'), or the 5-digit code on the stop.")
+        if national:
+            print("  name (e.g. 'Hexham'), or the stop's ATCO code.")
+        else:
+            print("  name (e.g. 'Green Park Station'), or the 5-digit code on the stop.")
         # Blank keeps the stop already configured rather than silently dropping
         # it - only a board with no stop yet treats blank as "skip".
         if current:
@@ -324,18 +332,30 @@ def choose_bus_stop(current="", required=False):
             return current
 
         # A bare stop code needs no search - check it and take it as given.
-        if search.isdigit():
-            status, _ = bus_arrivals(search)
+        # Only London codes are all digits; an ATCO code is longer and usually
+        # mixed, so outside London this recognises the ATCO form instead.
+        bare = (len(search) >= 8 and search.isalnum() and any(c.isdigit() for c in search)
+                if national else search.isdigit())
+        if bare:
+            if national:
+                status, _ = national_arrivals(search, app_id, app_key)
+            else:
+                status, _ = bus_arrivals(search)
+            if status == "bad_key":
+                print("  ! Those TransportAPI credentials were rejected.")
+                continue
             if status == "bad_stop":
-                print(f"  ! TfL doesn't know stop code '{search}'. Check the number on the stop.")
+                print(f"  ! No stop found with the code '{search}'.")
                 continue
             if status != "ok":
                 print("  (couldn't verify online - accepting the code as entered)")
             return search
 
-        stops, label = find_stops(search)
+        stops, label = (find_national_stops(search) if national
+                        else find_stops(search))
         if not stops:
-            print(f"  ! No London bus stops found for '{label}'. "
+            where = "UK" if national else "London"
+            print(f"  ! No {where} bus stops found for '{label}'. "
                   "Try a postcode, or a nearby landmark.")
             continue
 
@@ -343,7 +363,10 @@ def choose_bus_stop(current="", required=False):
         shown = stops[:12]
         for i, s in enumerate(shown):
             ind = f" ({s['indicator']})" if s["indicator"] else ""
-            towards = f"towards {s['towards']}" if s["towards"] else "(hail & ride)"
+            if s["towards"]:
+                towards = s["towards"] if national else f"towards {s['towards']}"
+            else:
+                towards = "" if national else "(hail & ride)"
             print(f"    [{i}] {s['name']}{ind}  -  {s['distance']:.0f}m  -  {towards}")
         if len(stops) > len(shown):
             print(f"    ... {len(stops) - len(shown)} more not shown - "
@@ -353,6 +376,218 @@ def choose_bus_stop(current="", required=False):
         if not (sel.isdigit() and int(sel) < len(shown)):
             continue
         return shown[int(sel)]["code"]
+
+
+# --------------------------------------------------------------------------- #
+# Buses outside London - TransportAPI for departures, Overpass for the stops
+#
+# TfL's feed stops at the M25. TransportAPI is the only source in the right shape
+# for the rest of the UK, but its own stop search is not on the free plan (403
+# "not part of your plan"), and bustimes.org has no spatial search at all - it
+# ignores bbox, lat/lon and search alike, and answered a London bounding box with
+# stops in Downpatrick and Las Vegas. So stops come from OpenStreetMap via
+# Overpass, which is keyless, has a real radius query, and carries the ATCO code
+# TransportAPI wants. These mirror api.js exactly, so the .exe and the web page
+# resolve a given search to the same stop.
+# --------------------------------------------------------------------------- #
+
+OVERPASS = "https://overpass-api.de/api/interpreter"
+TRANSPORTAPI = "https://transportapi.com/v3/uk"
+
+
+def _http_json(url, data=None, timeout=20):
+    """Fetch and parse one JSON document. Returns (status, obj)."""
+    import urllib.request
+    import urllib.error
+    import urllib.parse
+    body = data.encode("utf-8") if data else None
+    req = urllib.request.Request(
+        url, data=body, headers={"User-Agent": "DepartureBuddy-installer"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return "ok", json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return "bad_key", None
+        # An unknown stop code answers 400 ("A stop with code X doesn't exist"),
+        # not 404. The only variable in the URL is the stop, so 400 means that.
+        if e.code in (400, 404):
+            return "bad_stop", None
+        return "net", None
+    except Exception:
+        return "net", None
+
+
+def national_stops_near(lat, lon, radius_m):
+    """Bus stops near a point, from OpenStreetMap. Same shape as stops_near()."""
+    import urllib.parse
+    q = (f'[out:json][timeout:25];node(around:{int(radius_m)},{lat:.6f},{lon:.6f})'
+         '["highway"="bus_stop"];out body 60;')
+    status, d = _http_json(OVERPASS, data="data=" + urllib.parse.quote(q))
+    if status != "ok" or not d:
+        return []
+    stops = []
+    for el in d.get("elements", []):
+        tags = el.get("tags") or {}
+        atco = tags.get("naptan:AtcoCode")
+        # A stop with no ATCO code cannot be asked about, so it is not offered.
+        if not atco or el.get("lat") is None:
+            continue
+        stops.append({
+            "code": str(atco),
+            "name": tags.get("name") or tags.get("naptan:CommonName") or str(atco),
+            "towards": f"heading {tags['bearing']}" if tags.get("bearing") else "",
+            "indicator": tags.get("naptan:Indicator") or tags.get("local_ref") or "",
+            "lat": float(el["lat"]),
+            "lon": float(el["lon"]),
+            "distance": _haversine_m(lat, lon, float(el["lat"]), float(el["lon"])),
+        })
+    stops.sort(key=lambda x: x["distance"])
+    return stops
+
+
+def geocode_place_uk(query):
+    """UK-wide place lookup. geocode_place() is TfL's index, so London only."""
+    import urllib.parse
+    status, d = _http_json(
+        "https://api.postcodes.io/places?limit=5&q=" + urllib.parse.quote(query))
+    if status != "ok" or not d:
+        return []
+    return [{"name": r.get("name_1") or query,
+             "lat": float(r["latitude"]), "lon": float(r["longitude"])}
+            for r in (d.get("result") or []) if r.get("latitude") is not None]
+
+
+def find_national_stops(search):
+    """The national twin of find_stops(). Returns (stops, label).
+
+    A wider radius than London's: stops are much further apart outside a city,
+    and an empty list is a worse answer than a slightly long one."""
+    q = search.strip()
+    if POSTCODE_RE.match(q):
+        point = geocode_postcode(q)
+        if not point:
+            return [], q.upper()
+        return national_stops_near(point[0], point[1], 800), q.upper()
+    matches = geocode_place_uk(q)
+    if not matches:
+        return [], q
+    m = matches[0]
+    return national_stops_near(m["lat"], m["lon"], 800), m["name"]
+
+
+def national_arrivals(atco, app_id, app_key, line_filter=""):
+    """Live departures at an ATCO stop: (status, [(route, dest, mins)]).
+
+    Mirrors bus_national.cpp - same canonical endpoint, same
+    best_departure_estimate, same midnight handling - so the preview here and
+    the board agree. The older /bus/stop/{atco}/live.json answers 301, and a
+    redirect would cost a second request out of a thirty-a-day allowance."""
+    import urllib.parse
+    url = (f"{TRANSPORTAPI}/bus/stop_timetables/{urllib.parse.quote(atco)}.json"
+           f"?app_id={urllib.parse.quote(app_id)}&app_key={urllib.parse.quote(app_key)}"
+           "&group=false&live=true&limit=12")
+    status, d = _http_json(url)
+    if status != "ok" or not d:
+        return status, []
+
+    def mod(text, off):
+        m = re.match(r"(\d{2}):(\d{2})", str(text or "")[off:])
+        if not m:
+            return -1
+        h, mi = int(m.group(1)), int(m.group(2))
+        return -1 if h > 23 or mi > 59 else h * 60 + mi
+
+    now = mod(d.get("request_time"), 11)
+    if now < 0:
+        return "net", []
+    rows = []
+    for x in (d.get("departures") or {}).get("all", []):
+        if ((x.get("status") or {}).get("cancellation") or {}).get("value"):
+            continue
+        route = str(x.get("line_name") or "")
+        if not route:
+            continue
+        if line_filter and route.lower() != line_filter.lower():
+            continue
+        dep = mod(x.get("best_departure_estimate"), 0)
+        if dep < 0:
+            continue
+        mins = dep - now
+        if mins < -60:            # the departure is tomorrow
+            mins += 1440
+        elif mins > 1440 - 60:    # it was yesterday, running late
+            mins -= 1440
+        mins = max(0, mins)
+        if mins > 30:
+            continue
+        rows.append((route, str(x.get("direction") or ""), mins))
+    rows.sort(key=lambda r: r[2])
+    return "ok", rows
+
+
+BUS_PLANS = ((30, "Free - 30 requests a day"),
+             (300, "Home use - 300 a day (GBP 5/month)"),
+             (1000, "Commercial trial - 1000 a day"))
+
+
+def ask_bus_provider(defaults):
+    """Which bus feed, and the credentials and allowance the national one needs.
+
+    Returns (provider, app_id, app_key, budget). Asked before the stop, because
+    outside London the stop picker needs the key to show what is due."""
+    print("\nWhere is your bus stop?")
+    print("    1) London - free, nothing to sign up for")
+    print("    2) Anywhere else in the UK - needs a free TransportAPI key")
+    cur = "2" if defaults.get("busprov") == "national" else "1"
+    if ask("  Choose", cur) .strip() != "2":
+        return "tfl", "", "", 0
+
+    print("\n  TransportAPI covers the whole UK but meters requests by the day.")
+    print("  Sign up at https://developer.transportapi.com/signup - see")
+    print("  docs/transportapi-key.md for the steps.")
+    app_id = ask("  app_id", defaults.get("busid", ""))
+    app_key = ask("  app_key", defaults.get("buskey", ""))
+
+    print("\n  Your plan's daily allowance:")
+    for i, (n, label) in enumerate(BUS_PLANS, 1):
+        print(f"    {i}) {label}")
+    cur_budget = int(defaults.get("busbudget") or 30)
+    cur_sel = next((str(i) for i, (n, _) in enumerate(BUS_PLANS, 1)
+                    if n == cur_budget), "1")
+    sel = ask("  Choose", cur_sel).strip()
+    budget = BUS_PLANS[int(sel) - 1][0] if sel in ("1", "2", "3") else 30
+
+    # Say plainly what that buys. The arithmetic is the board's (BUS-18), and
+    # hiding it is how someone ends up disappointed by a 32-minute refresh.
+    on_hours = _screen_on_hours(defaults)
+    every = max(30, (on_hours * 3600) // budget)
+    print(f"\n  Spread over the {on_hours} hours a day your screen is on, that is")
+    print(f"  one update every {every / 60:.1f} minutes. Nothing is spent overnight.")
+    if every > 900:
+        print("  ! At that rate a bus can come and go between updates.")
+
+    if app_id and app_key:
+        status, _ = national_arrivals("370023135", app_id, app_key)
+        print({"ok": "  Credentials check out.",
+               "bad_key": "  ! Those credentials were rejected - the bus screen"
+                          " will not work.",
+               "bad_stop": "  Credentials work (the test stop was not found).",
+               "net": "  Could not reach TransportAPI to check them."}[status])
+    return "national", app_id, app_key, budget
+
+
+def _screen_on_hours(defaults):
+    """Hours a day the screen is on, matching Config::on_hours()."""
+    start, end = defaults.get("bstart", -1), defaults.get("bend", -1)
+    try:
+        start, end = int(start), int(end)
+    except (TypeError, ValueError):
+        return 24
+    if start < 0 or end < 0:
+        return 24
+    blank = (end - start) % 24
+    return 24 if blank <= 0 else 24 - blank
 
 
 def bus_wizard(defaults, required=False):
@@ -365,27 +600,45 @@ def bus_wizard(defaults, required=False):
     otherwise a blank search drops the bus screen and the caller prunes it from
     the service set."""
     current = defaults.get("bus", "")
+    prov, app_id, app_key, budget = ask_bus_provider(defaults)
+    national = prov == "national"
+    # A stop belongs to the provider that found it: a TfL SMS code means nothing
+    # to TransportAPI and an ATCO code nothing to TfL, so a change of provider
+    # discards the stored stop rather than carrying one across that cannot work.
+    if national != (defaults.get("busprov") == "national"):
+        current = ""
 
     print("\nYour bus stop")
     if required:
-        print("  The board will show live arrivals for one London stop.")
+        print("  The board will show live arrivals for one stop.")
+    elif national:
+        print("  Live arrivals for one UK stop. Leave the search blank to drop")
+        print("  the bus screen after all.")
     else:
         print("  Live arrivals for one London stop, from TfL's open data - no")
         print("  extra key needed. London only. Leave the search blank to drop")
         print("  the bus screen after all.")
 
+    if national and not (app_id and app_key):
+        print("  ! Without credentials the bus screen cannot work - skipping it.")
+        return "", "", prov, app_id, app_key, budget
+
     while True:
-        code = choose_bus_stop(current, required)
+        code = choose_bus_stop(current, required,
+                               national=national, app_id=app_id, app_key=app_key)
         if code or not required:
             break
         print("  ! A buses-only board needs a stop. Enter one, or re-run and"
               " add another service.")
     if not code:
-        return "", ""
+        return "", "", prov, app_id, app_key, budget
 
     line = ask("  Show only one route? (e.g. 38; blank = all routes)",
                defaults.get("busline", ""))
-    status, arrivals = bus_arrivals(code, line)
+    if national:
+        status, arrivals = national_arrivals(code, app_id, app_key, line)
+    else:
+        status, arrivals = bus_arrivals(code, line)
     if status == "ok":
         if arrivals:
             print("  Next buses right now:")
@@ -394,7 +647,7 @@ def bus_wizard(defaults, required=False):
                 print(f"    {route:>4}  {dest:<28} {when}")
         else:
             print("  (nothing due at this stop right now - the stop is valid)")
-    return code, line
+    return code, line, prov, app_id, app_key, budget
 
 
 # --------------------------------------------------------------------------- #
@@ -748,7 +1001,7 @@ def ask(prompt, default="", required=False, cast=str, lo=None, hi=None):
 
 SERVICES = [
     ("train", "Trains", "UK-wide, National Rail"),
-    ("bus", "London buses", "TfL, London only"),
+    ("bus", "Buses", "London free; elsewhere needs a TransportAPI key"),
     ("river", "River boats", "Uber Boat by Thames Clippers + Woolwich Ferry"),
 ]
 
@@ -904,8 +1157,11 @@ def wizard(defaults=None, on_board=False):
     if "bus" not in services:
         # Leave the stored stop alone so switching buses back on keeps it.
         cfg["bus"] = cfg["busline"] = None
+        cfg["busprov"] = cfg["busid"] = cfg["buskey"] = cfg["busbudget"] = None
     else:
-        cfg["bus"], cfg["busline"] = bus_wizard(d, required=(services == ["bus"]))
+        (cfg["bus"], cfg["busline"], cfg["busprov"], cfg["busid"],
+         cfg["buskey"], cfg["busbudget"]) = bus_wizard(
+            d, required=(services == ["bus"]))
 
     if "river" not in services:
         cfg["river"] = cfg["riverline"] = cfg["rivername"] = None
