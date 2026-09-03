@@ -124,10 +124,10 @@ ESP32Departures/
   [TransportAPI](https://developer.transportapi.com/), the one source that
   answers "what is next at this stop" nationally. It meters by the day rather
   than the second, so the board divides its allowance evenly across the hours
-  the screen is on and spends nothing overnight. Stops are found through
-  OpenStreetMap, which carries the ATCO codes TransportAPI indexes by —
-  TransportAPI's own stop search is not on the free plan, and bustimes.org has
-  no spatial search at all.
+  the screen is on and spends nothing overnight. Stops come from the same
+  provider's place index; bustimes.org has no spatial search at all, and
+  OpenStreetMap via Overpass is quota-free but far too slow to build a picker
+  on — measured 87 seconds for one query.
 - **London buses** come from TfL's
   [Live Bus & River Bus Arrivals API](https://content.tfl.gov.uk/tfl-live-bus-river-bus-arrivals-api-documentation.pdf)
   (the Countdown "URA" feed), which needs no key. Its responses are one JSON

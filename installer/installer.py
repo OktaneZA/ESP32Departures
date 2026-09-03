@@ -351,7 +351,7 @@ def choose_bus_stop(current="", required=False,
                 print("  (couldn't verify online - accepting the code as entered)")
             return search
 
-        stops, label = (find_national_stops(search) if national
+        stops, label = (find_national_stops(search, app_id, app_key) if national
                         else find_stops(search))
         if not stops:
             where = "UK" if national else "London"
@@ -379,19 +379,20 @@ def choose_bus_stop(current="", required=False,
 
 
 # --------------------------------------------------------------------------- #
-# Buses outside London - TransportAPI for departures, Overpass for the stops
+# Buses outside London - TransportAPI
 #
-# TfL's feed stops at the M25. TransportAPI is the only source in the right shape
-# for the rest of the UK, but its own stop search is not on the free plan (403
-# "not part of your plan"), and bustimes.org has no spatial search at all - it
-# ignores bbox, lat/lon and search alike, and answered a London bounding box with
-# stops in Downpatrick and Las Vegas. So stops come from OpenStreetMap via
-# Overpass, which is keyless, has a real radius query, and carries the ATCO code
-# TransportAPI wants. These mirror api.js exactly, so the .exe and the web page
-# resolve a given search to the same stop.
+# TfL's feed stops at the M25. Outside London both the departures and the stop
+# list come from TransportAPI, for reasons that took some finding: bustimes.org
+# has no spatial search at all (it ignores bbox, lat/lon and search alike, and
+# answered a London bounding box with stops in Downpatrick and Las Vegas), and
+# OpenStreetMap via Overpass is quota-free but far too slow and flaky for an
+# interactive picker - measured 504, then 429, then 87 seconds for one query.
+# /bus/stops/near.json is 403 on the free plan, but /places.json is not.
+#
+# These mirror api.js exactly, so the .exe and the web page resolve a given
+# search to the same stop.
 # --------------------------------------------------------------------------- #
 
-OVERPASS = "https://overpass-api.de/api/interpreter"
 TRANSPORTAPI = "https://transportapi.com/v3/uk"
 
 
@@ -418,29 +419,54 @@ def _http_json(url, data=None, timeout=20):
         return "net", None
 
 
-def national_stops_near(lat, lon, radius_m):
-    """Bus stops near a point, from OpenStreetMap. Same shape as stops_near()."""
+def national_stops_near(lat, lon, radius_m, app_id, app_key):
+    """Bus stops near a point, from TransportAPI. Same shape as stops_near().
+
+    Costs one request out of the daily allowance, which is why it runs only on an
+    explicit search. OpenStreetMap via Overpass is quota-free and was tried
+    first, but it is a heavily loaded public service - measured 504, then 429,
+    then 87 seconds for a single Nottingham query."""
+    import re as _re
     import urllib.parse
-    q = (f'[out:json][timeout:25];node(around:{int(radius_m)},{lat:.6f},{lon:.6f})'
-         '["highway"="bus_stop"];out body 60;')
-    status, d = _http_json(OVERPASS, data="data=" + urllib.parse.quote(q))
+    url = (f"{TRANSPORTAPI}/places.json?app_id={urllib.parse.quote(app_id)}"
+           f"&app_key={urllib.parse.quote(app_key)}&type=bus_stop"
+           f"&lat={lat:.6f}&lon={lon:.6f}")
+    status, d = _http_json(url)
     if status != "ok" or not d:
         return []
     stops = []
-    for el in d.get("elements", []):
-        tags = el.get("tags") or {}
-        atco = tags.get("naptan:AtcoCode")
-        # A stop with no ATCO code cannot be asked about, so it is not offered.
-        if not atco or el.get("lat") is None:
+    for m in d.get("member", []):
+        if not m.get("atcocode") or m.get("latitude") is None:
+            continue
+        # Names arrive as "Canal Street (Stop C3) - E-bound"; the bracketed
+        # indicator and the bearing are split out so the listing reads like the
+        # London one rather than as one long line.
+        raw = str(m.get("name") or m["atcocode"])
+        # Peel the compass bearing off the end first, and only when it really is
+        # one - names contain hyphens of their own, so a looser split would eat
+        # half of "Newcastle-under-Lyme".
+        towards = ""
+        bound = _re.search(r"\s*-\s*([NSEW]{1,2}-bound)\s*$", raw, _re.I)
+        if bound:
+            towards = bound.group(1)
+            raw = raw[:bound.start()]
+        indicator = ""
+        br = _re.match(r"^(.*?)\s*\((.*?)\)\s*$", raw)
+        if br:
+            indicator = br.group(2)
+            raw = br.group(1)
+        dist = (float(m["distance"]) if m.get("distance") is not None
+                else _haversine_m(lat, lon, float(m["latitude"]), float(m["longitude"])))
+        if radius_m and dist > radius_m:
             continue
         stops.append({
-            "code": str(atco),
-            "name": tags.get("name") or tags.get("naptan:CommonName") or str(atco),
-            "towards": f"heading {tags['bearing']}" if tags.get("bearing") else "",
-            "indicator": tags.get("naptan:Indicator") or tags.get("local_ref") or "",
-            "lat": float(el["lat"]),
-            "lon": float(el["lon"]),
-            "distance": _haversine_m(lat, lon, float(el["lat"]), float(el["lon"])),
+            "code": str(m["atcocode"]),
+            "name": raw,
+            "towards": towards,
+            "indicator": indicator,
+            "lat": float(m["latitude"]),
+            "lon": float(m["longitude"]),
+            "distance": dist,
         })
     stops.sort(key=lambda x: x["distance"])
     return stops
@@ -458,22 +484,24 @@ def geocode_place_uk(query):
             for r in (d.get("result") or []) if r.get("latitude") is not None]
 
 
-def find_national_stops(search):
+def find_national_stops(search, app_id, app_key):
     """The national twin of find_stops(). Returns (stops, label).
 
     A wider radius than London's: stops are much further apart outside a city,
-    and an empty list is a worse answer than a slightly long one."""
+    and an empty list is a worse answer than a slightly long one. Geocoding stays
+    on postcodes.io, which is unmetered, so a search spends exactly one
+    TransportAPI request however it was phrased."""
     q = search.strip()
     if POSTCODE_RE.match(q):
         point = geocode_postcode(q)
         if not point:
             return [], q.upper()
-        return national_stops_near(point[0], point[1], 800), q.upper()
+        return national_stops_near(point[0], point[1], 1500, app_id, app_key), q.upper()
     matches = geocode_place_uk(q)
     if not matches:
         return [], q
     m = matches[0]
-    return national_stops_near(m["lat"], m["lon"], 800), m["name"]
+    return national_stops_near(m["lat"], m["lon"], 1500, app_id, app_key), m["name"]
 
 
 def national_arrivals(atco, app_id, app_key, line_filter=""):

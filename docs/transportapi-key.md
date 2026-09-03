@@ -94,12 +94,11 @@ just means TransportAPI starts refusing requests partway through the day.
 ## 4. Pick your stop
 
 Back in the setup page, search by postcode, town or village name, and choose
-from the list. Stops come from OpenStreetMap, which carries the **ATCO code**
-that TransportAPI indexes by, so you never have to look one up yourself.
+from the list — you never have to look up a stop code yourself.
 
-If a stop you can see in real life is missing from the list, it is almost always
-because OpenStreetMap has no ATCO code recorded for it. A stop on the other side
-of the same road usually works.
+Each search costs **one** request from your daily allowance, so on the free tier
+a handful of searches while setting up is fine, but idly hunting around will eat
+into the day. Looking up the postcode itself is free.
 
 ---
 

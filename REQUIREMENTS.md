@@ -250,9 +250,10 @@ itself never calls them:
 | BUS-28 | An unknown ATCO code answers **400** (`A stop with code X doesn't exist`), not 404. 400/401/403/404 are all treated as configuration errors — the screen is withheld rather than retried at the failure cadence |
 | BUS-29 | The national error body is **never logged**: it quotes the `app_id` back, and the serial log is the one place a credential must not appear |
 | BUS-30 | A national board with no `busbudget` provisioned assumes the free tier (30/day) rather than falling through to the unmetered interval, which would spend a day's allowance in a quarter of an hour |
-| BUS-31 | National stops are found through **OpenStreetMap (Overpass)**, which is keyless, CORS-open, supports a radius query and carries `naptan:AtcoCode`. TransportAPI's own `/bus/stops/near.json` is not on the free plan (403), and bustimes.org silently ignores `bbox`, latitude/longitude and `search` alike — a London bounding box returned stops in Downpatrick and Las Vegas |
-| BUS-32 | Stops with no ATCO code cannot be asked about and are not offered. Measured coverage: 40/40 in Sheffield and Truro, 39/45 in rural Northumberland and Wales |
+| BUS-31 | National stops are found through TransportAPI's `/places.json?type=bus_stop`, which is on the free plan and CORS-open. `/bus/stops/near.json` is **not** (403). bustimes.org silently ignores `bbox`, latitude/longitude and `search` alike — a London bounding box returned stops in Downpatrick and Las Vegas. OpenStreetMap via Overpass is quota-free and does carry `naptan:AtcoCode`, but measured 504, then 429, then **87 seconds** for one query, which no interactive picker can use |
+| BUS-32 | A stop search costs **one** request from the daily allowance. Geocoding stays on postcodes.io, which is unmetered, so it is exactly one however the search was phrased |
 | BUS-33 | Changing provider **clears the stored stop**: a TfL SMS code means nothing to TransportAPI and an ATCO code nothing to TfL |
+| BUS-34 | A failed stop search reports why — rejected credentials, a spent allowance, or a busy service — and never leaves the picker showing "Searching…" indefinitely. Both front-ends wrap the whole search, so a throw anywhere in it surfaces as a message |
 
 ---
 

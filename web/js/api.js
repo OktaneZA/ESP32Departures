@@ -7,7 +7,6 @@
 //   countdown.api.tfl.gov.uk    Access-Control-Allow-Origin: *
 //   api.postcodes.io            Access-Control-Allow-Origin: *
 //   api1.raildata.org.uk        reflects the requesting origin
-//   overpass-api.de             Access-Control-Allow-Origin: *
 //   transportapi.com            Access-Control-Allow-Origin: * (on 200 and 403,
 //                               so a key can be checked before any hardware is)
 //
@@ -185,53 +184,66 @@ export async function busArrivals(code, lineFilter = '') {
 
 // --- buses outside London ---------------------------------------------------
 //
-// TfL's feed stops at the M25, and the picker above with it. Two different
-// sources are needed out here, for a reason worth recording:
+// TfL's feed stops at the M25, and the picker above with it. Outside London both
+// the departures and the stop list come from TransportAPI, for reasons that took
+// some finding:
 //
-//   * TransportAPI serves the departures, but its own /bus/stops/near.json is
-//     403 "not part of your plan" on the free tier, so it cannot find stops.
 //   * bustimes.org has stop data but no spatial search at all: it silently
 //     ignores bbox, latitude/longitude/distance and search, and answered a
-//     London bounding box with stops in Downpatrick and Las Vegas. Only exact
-//     atco_code lookup is honoured, which is a lookup, not a picker.
+//     London bounding box with stops in Downpatrick and Las Vegas.
+//   * OpenStreetMap via Overpass is quota-free and does carry naptan:AtcoCode,
+//     but it is a heavily loaded public service — measured 504, then 429, then
+//     87 seconds for one Nottingham query. Not something a setup page can use.
+//   * TransportAPI's /bus/stops/near.json is 403 on the free plan, but
+//     /places.json?type=bus_stop is not, and is both fast and CORS-open.
 //
-// So stops come from Overpass (OpenStreetMap), which is keyless, CORS-open, has
-// a real radius query, and carries naptan:AtcoCode — the identifier TransportAPI
-// wants. Measured coverage: 40/40 stops in Sheffield and Truro, 39/45 in rural
-// Northumberland and Wales. Stops without an ATCO simply cannot be asked about,
-// so they are dropped rather than offered.
+// So a search costs one request from the daily allowance. Geocoding stays on
+// postcodes.io, which is unmetered, so it is exactly one however it was phrased.
 
-const OVERPASS = 'https://overpass-api.de/api/interpreter';
 const TRANSPORTAPI = 'https://transportapi.com/v3/uk';
 
 // Bus stops within `radiusM` of a point, nearest first. Same shape as
 // stopsNear() so the picker UI does not care which provider filled it.
-export async function nationalStopsNear(lat, lon, radiusM) {
-  const q = `[out:json][timeout:25];node(around:${Math.round(radiusM)},`
-    + `${lat.toFixed(6)},${lon.toFixed(6)})["highway"="bus_stop"];out body 60;`;
-  // Overpass wants the query as a form body. That keeps it a simple request
-  // with no preflight, the same constraint every other call here works under.
-  const r = await fetch(OVERPASS, {
-    method: 'POST',
-    body: new URLSearchParams({ data: q }),
-  });
-  if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
-  const d = await r.json();
+// Stops near a point, from TransportAPI's own place index. Same shape as
+// stopsNear() so the picker UI does not care which provider filled it.
+//
+// This costs one request out of the daily allowance, which is why it is not used
+// for anything but an explicit search. That is a fair price: OpenStreetMap via
+// Overpass is quota-free and was tried first, but it is a heavily loaded public
+// service that answered 504, then 429, then took 87 seconds to return a single
+// Nottingham query. A setup page cannot be built on that.
+export async function nationalStopsNear(lat, lon, radiusM, appId, appKey) {
+  const url = `${TRANSPORTAPI}/places.json?app_id=${encodeURIComponent(appId)}`
+    + `&app_key=${encodeURIComponent(appKey)}&type=bus_stop`
+    + `&lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`;
+  const d = await getJson(url);
   const stops = [];
-  for (const el of d.elements || []) {
-    const t = el.tags || {};
-    const atco = t['naptan:AtcoCode'];
-    if (!atco || el.lat == null) continue;
+  for (const m of d.member || []) {
+    if (!m.atcocode || m.latitude == null) continue;
+    // Names come through as "Canal Street (Stop C3) - E-bound": the bracketed
+    // indicator and the compass bearing are separated out so the picker can
+    // show them the way the London one does, rather than one long line.
+    let raw = plain(m.name || m.atcocode);
+    // Peel the compass bearing off the end first, and only when it really is
+    // one -- names contain hyphens of their own, so a looser split would eat
+    // half of "Newcastle-under-Lyme".
+    let towards = '';
+    const bound = /\s*-\s*([NSEW]{1,2}-bound)\s*$/i.exec(raw);
+    if (bound) { towards = bound[1]; raw = raw.slice(0, bound.index); }
+    let indicator = '';
+    const br = /^(.*?)\s*\((.*?)\)\s*$/.exec(raw);
+    if (br) { indicator = br[2]; raw = br[1]; }
+    const dist = m.distance != null ? Number(m.distance)
+                                    : haversineM(lat, lon, +m.latitude, +m.longitude);
+    if (radiusM && dist > radiusM) continue;
     stops.push({
-      code: String(atco),
-      name: plain(t.name || t['naptan:CommonName'] || String(atco)),
-      // OSM records which way the stop faces; the nearest thing it has to
-      // TfL's "Towards", and the only hint of direction available out here.
-      towards: t.bearing ? `heading ${t.bearing}` : '',
-      indicator: plain(t['naptan:Indicator'] || t.local_ref || ''),
-      lat: Number(el.lat),
-      lon: Number(el.lon),
-      distance: haversineM(lat, lon, Number(el.lat), Number(el.lon)),
+      code: String(m.atcocode),
+      name: raw,
+      towards,
+      indicator,
+      lat: Number(m.latitude),
+      lon: Number(m.longitude),
+      distance: dist,
     });
   }
   stops.sort((a, b) => a.distance - b.distance);
@@ -254,17 +266,20 @@ export async function geocodePlaceUK(query) {
 // The national twin of findStops(). A wider radius than London's 250-500m:
 // stops are much further apart outside a city, and an empty list is a worse
 // answer than a slightly long one.
-export async function findNationalStops(search) {
+export async function findNationalStops(search, appId, appKey) {
   const q = search.trim();
-  if (POSTCODE_RE.test(q)) {
-    const point = await geocodePostcode(q);
-    if (!point) return { stops: [], label: q.toUpperCase() };
-    return { stops: await nationalStopsNear(point[0], point[1], 800), label: q.toUpperCase() };
+  // Geocoding stays on postcodes.io, which is free and unmetered, so a search
+  // spends exactly one TransportAPI request however it was phrased.
+  const point = POSTCODE_RE.test(q) ? await geocodePostcode(q) : null;
+  if (point) {
+    return { stops: await nationalStopsNear(point[0], point[1], 1500, appId, appKey),
+             label: q.toUpperCase() };
   }
+  if (POSTCODE_RE.test(q)) return { stops: [], label: q.toUpperCase() };
   const matches = await geocodePlaceUK(q);
   if (!matches.length) return { stops: [], label: q };
   const m = matches[0];
-  return { stops: await nationalStopsNear(m.lat, m.lon, 800), label: m.name };
+  return { stops: await nationalStopsNear(m.lat, m.lon, 1500, appId, appKey), label: m.name };
 }
 
 // Live departures at an ATCO stop: (status, rows). Status is

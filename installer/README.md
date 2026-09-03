@@ -167,10 +167,9 @@ To turn the bus screen off later, re-run the installer, choose **Change
 settings**, and answer `n` to the bus question. (Pressing Enter at the stop
 search keeps the stop you already have.)
 
-> Outside London the stop list comes from OpenStreetMap, which carries the ATCO
-> codes TransportAPI indexes by. A stop you can see in real life but cannot find
-> in the list usually has no ATCO code recorded in OSM; the stop on the other
-> side of the road normally works.
+> Outside London each stop search costs one request from your TransportAPI
+> allowance, so a handful while setting up is fine but idle hunting is not.
+> Looking up the postcode itself is free.
 >
 > London bus data provided by Transport for London. National bus data by
 > TransportAPI.

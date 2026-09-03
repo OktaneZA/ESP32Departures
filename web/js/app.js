@@ -168,7 +168,29 @@ function national() { return ui.busprov === 'national'; }
 
 function initBuses() {
   const box = $('busSearch');
+
+  // Any failure below used to leave the panel showing "Searching..." for ever,
+  // because nothing caught it. Overpass makes that easy to hit -- it is a free,
+  // heavily loaded service that answers 504 when overloaded and 429 when rate
+  // limiting -- but the London path could hang the same way, just more rarely.
   const go = async () => {
+    try {
+      await runSearch();
+    } catch (err) {
+      const st = err && err.status;
+      const msg = (st === 401 || st === 403)
+        ? 'TransportAPI rejected the search. Check your app_id and app_key, and that'
+          + ' today’s allowance is not already spent.'
+        : (st === 429 || st === 503 || st === 504)
+          ? 'The stop lookup service is busy right now. Wait a few seconds and search again.'
+          : 'Could not search for stops: '
+            + escapeHtml((err && err.message) || 'network error')
+            + '. Check your connection and try again.';
+      $('busResults').innerHTML = `<p class="hint">${msg}</p>`;
+    }
+  };
+
+  const runSearch = async () => {
     const q = box.value.trim();
     const out = $('busResults');
     if (!q) return;
@@ -201,8 +223,9 @@ function initBuses() {
       return;
     }
 
-    const { stops, label } = national() ? await api.findNationalStops(q)
-                                        : await api.findStops(q);
+    const { stops, label } = national()
+      ? await api.findNationalStops(q, ui.busid, ui.buskey)
+      : await api.findStops(q);
     if (!stops.length) {
       out.innerHTML = `<p class="hint">No bus stops found for “${escapeHtml(label)}”.
         Try a postcode, or a nearby landmark.</p>`;
