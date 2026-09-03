@@ -56,6 +56,10 @@ def main():
             "offset": offset,
             "size": len(data),
             "sha256": hashlib.sha256(data).hexdigest(),
+            # The board reports MD5, because that is what Arduino exposes for
+            # the running image. Published so a user can check that what is on
+            # their device is what was released here.
+            "md5": hashlib.md5(data).hexdigest(),
         })
         print(f"  {name:<18} {len(data):>9,} bytes  {parts[-1]['sha256'][:16]}…")
 

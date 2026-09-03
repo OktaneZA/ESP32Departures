@@ -19,6 +19,7 @@
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include "tls.h"
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <esp_heap_caps.h>
@@ -117,11 +118,9 @@ Fetch fetchDepartures(const Config& cfg, std::vector<Departure>& out,
         url += "&filterCrs=" + cfg.dest_crs + "&filterType=to";
     }
 
-    // TLS: setInsecure() encrypts but does not authenticate the server. For full
-    // protection paste api1.raildata.org.uk's root CA and use setCACert() instead.
+    // TLS: verified against the embedded Mozilla root store (see tls.h).
     WiFiClientSecure client;
-    client.setInsecure();
-    // client.setCACert(RAILDATA_ROOT_CA);
+    net::trustRoots(client);
 
     HTTPClient http;
     http.setTimeout(15000);

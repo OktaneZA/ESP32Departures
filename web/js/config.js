@@ -69,8 +69,13 @@ export function rgb565ToHex(v) {
 }
 
 // What the board will really show for a colour the user picked.
+//
+// Falls back to black rather than to the input. The result is interpolated into
+// a style attribute, and returning whatever was passed in would make a bad
+// colour a CSS injection -- unreachable today, since the only source is an
+// <input type=color>, but one config-import away from mattering.
 export function quantise(hex) {
-  return rgb565ToHex(hexToRgb565(hex)) || hex;
+  return rgb565ToHex(hexToRgb565(hex)) || '#000000';
 }
 
 // The firmware's compiled-in defaults, as hex. Matches display.cpp's AMBER,

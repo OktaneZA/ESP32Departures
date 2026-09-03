@@ -18,6 +18,7 @@
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include "tls.h"
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
@@ -77,10 +78,10 @@ Fetch fetchCurrent(const Config& cfg, Weather& out) {
              "&wind_speed_unit=mph&timezone=auto&forecast_days=1",
              kBase, cfg.wx_latitude(), cfg.wx_longitude());
 
-    // TLS: as with the other clients, setInsecure() encrypts without
-    // authenticating the server. No credentials travel on this request.
+    // TLS: verified against the embedded Mozilla root store (see tls.h). No
+    // credentials travel on this request.
     WiFiClientSecure client;
-    client.setInsecure();
+    net::trustRoots(client);
 
     HTTPClient http;
     http.setTimeout(15000);

@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build and deploy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: false
           lfs: false
@@ -38,11 +38,23 @@ jobs:
       # Stage the firmware into the site and write its manifest. The binaries
       # live in installer/firmware/ and are shared with the .exe, so they are
       # copied at publish time rather than tracked twice.
+      # esptool-js writes to people's hardware, so its integrity is not a
+      # matter of trust: fail the build if the vendored copy no longer matches
+      # the hash recorded in web/vendor/README.md.
+      - name: Verify vendored esptool-js
+        shell: bash
+        run: |
+          recorded=$(grep -oE '[0-9a-f]{64}' web/vendor/README.md | head -1)
+          actual=$(sha256sum web/vendor/esptool.js | cut -d' ' -f1)
+          echo "recorded: $recorded"
+          echo "actual:   $actual"
+          [ "$recorded" = "$actual" ] || { echo "::error::vendored esptool.js does not match its recorded hash"; exit 1; }
+
       - name: Stage firmware and build manifest
         run: python web/build-firmware.py
 
       - name: Deploy
-        uses: Azure/static-web-apps-deploy@v1
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -59,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Close pull request preview
     steps:
-      - uses: Azure/static-web-apps-deploy@v1
+      - uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           action: close

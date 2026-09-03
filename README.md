@@ -117,6 +117,7 @@ itself, so they survive being unplugged — and survive firmware updates too.
 | [Setup walkthrough](installer/README.md) | Using the installer, and troubleshooting |
 | [Technical detail](DETAILS.md) | Building the firmware, the data feeds, project layout |
 | [The setup page itself](web/README.md) | Running or hosting your own copy |
+| [Security](SECURITY.md) | Verifying your firmware, and what is and isn't protected |
 | [Requirements](REQUIREMENTS.md) | The full specification |
 
 ---

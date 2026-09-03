@@ -26,6 +26,7 @@
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include "tls.h"
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <algorithm>
@@ -107,11 +108,10 @@ Fetch fetchArrivals(const Config& cfg, std::vector<BusArrival>& out, String& sto
         url += "&LineName=" + escapeParam(cfg.bus_line);
     }
 
-    // TLS: as with the rail client, setInsecure() encrypts without authenticating
-    // the server. Swap in setCACert() with countdown.api.tfl.gov.uk's root CA to
-    // harden. No credentials travel on this request — the feed is unauthenticated.
+    // TLS: verified against the embedded Mozilla root store (see tls.h). No
+    // credentials travel on this request — the feed is unauthenticated.
     WiFiClientSecure client;
-    client.setInsecure();
+    net::trustRoots(client);
 
     HTTPClient http;
     http.setTimeout(15000);

@@ -131,6 +131,25 @@ export class Board {
     return lines.some((l) => l.includes('SAVED'));
   }
 
+  // The MD5 of the firmware actually running, so it can be checked against the
+  // published release rather than taken on trust.
+  async readHash(timeoutMs = 8000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await this.write('HASH');
+      const lines = await this.readUntil((l) => l === 'END', 1200);
+      if (lines.includes('END')) {
+        const out = {};
+        for (const l of lines) {
+          const i = l.indexOf('=');
+          if (i > 0) out[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+        }
+        if (out.md5) return out;
+      }
+    }
+    return null;
+  }
+
   // Networks the board's own radio can see. The ESP32-S3 has no 5 GHz radio, so
   // a network missing here but visible on a phone is the usual explanation for
   // a board that will not connect (PROV-08).

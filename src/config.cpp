@@ -9,6 +9,7 @@
 //   COMMIT               -> SAVED, then reboots into the new config
 //   GET                  -> key=value lines (secrets masked), then END
 //   SCAN                 -> WiFi networks the board can actually see, then END
+//   HASH                 -> md5/size of the running firmware, then END
 //
 // Keys: ssid pass key dep dest plat tz bus busline river riverline rivername mode
 //       bstart bend bright refr colfg coldim colwarn colbg dwtrain dwbus dwriver
@@ -197,6 +198,15 @@ void handle_line(String line) {
         commit_and_reboot();  // does not return
     } else if (line == "SCAN") {
         scan_networks();
+    } else if (line == "HASH") {
+        // Lets a user prove the board is running the firmware that was
+        // published, rather than taking it on trust. getSketchMD5() hashes
+        // exactly the image the flasher wrote -- getSketchSize() returns the
+        // image length, not the free space -- so this is directly comparable
+        // to the md5 of firmware.bin in the release manifest.
+        Serial.print("md5=");  Serial.println(ESP.getSketchMD5());
+        Serial.print("size="); Serial.println(ESP.getSketchSize());
+        Serial.println("END");
     } else if (line == "GET") {
         Serial.print("dep=");    Serial.println(g_cfg.dep_crs);
         Serial.print("dest=");   Serial.println(g_cfg.dest_crs);
@@ -231,6 +241,8 @@ void handle_line(String line) {
         Serial.print("wlon=");   Serial.println(g_cfg.wx_lon);
         Serial.print("wname=");  Serial.println(g_cfg.wx_name);
         Serial.print("nmode=");  Serial.println(g_cfg.night_mode);
+        Serial.print("md5=");    Serial.println(ESP.getSketchMD5());
+        Serial.print("size=");   Serial.println(ESP.getSketchSize());
         Serial.print("wifi=");   Serial.println(WiFi.status() == WL_CONNECTED ? "up" : "down");
         Serial.print("prov=");   Serial.println(g_cfg.provisioned() ? 1 : 0);
         Serial.println("END");

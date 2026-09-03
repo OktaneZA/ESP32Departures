@@ -121,7 +121,7 @@ function initTrains() {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'result';
-      b.innerHTML = `${escapeHtml(s.n)} <span class="meta">${s.c}</span>`;
+      b.innerHTML = `${escapeHtml(s.n)} <span class="meta">${escapeHtml(s.c)}</span>`;
       b.onclick = () => {
         ui.dep = s.c;
         ui.depName = s.n;
@@ -551,6 +551,7 @@ async function connectAndConfigure() {
     }
     await sleep(1200);
     const check = await board.readConfig();
+    await verifyFirmware(board);
     await board.close();
     if (check) {
       logLine(`Confirmed: showing ${check.mode || '?'}, WiFi ${check.ssid || '?'}, `
@@ -563,6 +564,35 @@ async function connectAndConfigure() {
   }
   btn.disabled = false;
   showProblems();
+}
+
+// Ask the board what firmware it is running and compare it with what this site
+// published. This is the whole point of publishing a digest: the user gets to
+// check rather than trust.
+async function verifyFirmware(board) {
+  let manifest;
+  try {
+    manifest = await flasher.loadManifest();
+  } catch {
+    return;                       // nothing published here to compare against
+  }
+  const want = manifest.parts?.find((p) => p.path.endsWith('firmware.bin'))?.md5;
+  if (!want) return;              // an older manifest, before md5 was published
+
+  const got = await board.readHash();
+  if (!got) {
+    logLine('This board is running firmware too old to report its checksum.');
+    return;
+  }
+  if (got.md5.toLowerCase() === want.toLowerCase()) {
+    logLine(`Verified: running the published firmware (${manifest.version}).`, 'ok');
+  } else {
+    logLine('This board is NOT running the firmware published here.', 'bad');
+    logLine(`  board:     ${got.md5}`);
+    logLine(`  published: ${want}`);
+    logLine('That is expected if you built it yourself or flashed an older '
+      + 'release. If you did not, reflash from this page.');
+  }
 }
 
 // Download, verify and write the firmware. Returns true if the board was

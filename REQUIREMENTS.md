@@ -423,7 +423,8 @@ Newline-terminated line protocol on the USB CDC serial port (`src/config.cpp`).
 | PROV-08 | `SCAN` → one `SSID|rssi=|ch=|auth=` line per visible network, then `END`. The ESP32-S3 has no 5 GHz radio, so a network missing here but visible on a phone is the usual explanation for a board that will not connect |
 | PROV-09 | A `COMMIT` stages on top of the current config, so **omitting** a key preserves its stored value — the mechanism INST-11 relies on to avoid retyping secrets |
 | PROV-10 | `GET` reports a legacy `mode` as the set it means (`train,bus`), so the installer only ever has to understand the comma-separated form |
-| PROV-11 | The protocol is transport-agnostic: the same `PING`/`CFG`/`COMMIT` exchange is driven by the Python installer over pyserial and by the web configurator over Web Serial, with no firmware-side difference |
+| PROV-11 | `HASH` → `md5=` and `size=` for the running firmware, then `END`. Also included in `GET`, so the configurator needs no second round trip |
+| PROV-12 | The protocol is transport-agnostic: the same `PING`/`CFG`/`COMMIT` exchange is driven by the Python installer over pyserial and by the web configurator over Web Serial, with no firmware-side difference |
 
 ---
 
@@ -568,6 +569,12 @@ pin) and `BUTTON_2` (GPIO14).
 | SEC-06 | TLS server-certificate verification is a documented hardening option (`setCACert`); default `setInsecure()` is called out as a trade-off |
 | SEC-07 | Both TfL requests (bus and river) carry no credentials of any kind, so nothing sensitive is exposed by them |
 | SEC-08 | The bus stop code and route filter are percent-encoded into the query string, and the pier ID into the request path, so a stray character cannot alter either request |
+| SEC-09 | **TLS is verified, not merely encrypted.** Every client checks the server against Mozilla's root store, embedded from `data/cert/x509_crt_bundle.bin`. Previously all four called `setInsecure()`, so anything able to intercept a connection could feed the board arbitrary departures. `-DTLS_INSECURE` restores the old behaviour for diagnosing a broken chain and is never how a release is built |
+| SEC-10 | The board reports the MD5 of its running firmware via `HASH`, so a user can confirm it matches the published release rather than trusting it. `ESP.getSketchMD5()` hashes exactly the image the flasher wrote, making it directly comparable to `firmware.bin` |
+| SEC-11 | Every GitHub Action is pinned to a commit SHA rather than a tag. `softprops/action-gh-release` runs with `contents: write`, so a moved tag could otherwise publish arbitrary releases |
+| SEC-12 | CI fails if the vendored `esptool.js` no longer matches the SHA-256 recorded in `web/vendor/README.md`. That file flashes people's hardware, so its integrity is enforced rather than assumed |
+| SEC-13 | The board listens on no port and runs no server, so there is no service to flood. Poll intervals are matched to each upstream's own cache — being a good citizen of free APIs is itself a security property |
+| SEC-14 | Deliberately **not** protected, and documented as such in `SECURITY.md`: the exe is unsigned, there is no secure boot or flash encryption, and the serial protocol has no PIN. Physical access is total access, which is the right trade for a desk ornament showing public data |
 
 ---
 
