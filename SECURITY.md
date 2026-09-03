@@ -21,8 +21,8 @@ take the published binary on trust.
 Over USB, send `HASH` and it answers:
 
 ```
-md5=8990ce38a00dfad263509621045461ad
-size=1054192
+md5=60a6ea44c9798da0fd418c59359404d1
+size=1120560
 END
 ```
 
