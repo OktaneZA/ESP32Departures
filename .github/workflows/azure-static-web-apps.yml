@@ -44,7 +44,7 @@ jobs:
       - name: Verify vendored esptool-js
         shell: bash
         run: |
-          recorded=$(grep -oE '[0-9a-f]{64}' web/vendor/README.md | head -1)
+          recorded=$(grep -oE '[0-9a-f]{64}' web/vendor/README.md | head -1)
           actual=$(sha256sum web/vendor/esptool.js | cut -d' ' -f1)
           echo "recorded: $recorded"
           echo "actual:   $actual"
