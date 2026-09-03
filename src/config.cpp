@@ -12,8 +12,8 @@
 //   HASH                 -> md5/size of the running firmware, then END
 //
 // Keys: ssid pass key dep dest plat tz bus busline river riverline rivername mode
-//       bstart bend bright refr colfg coldim colwarn colbg dwtrain dwbus dwriver
-//       dwclock dwwx wlat wlon wname nmode
+//       busbudget bstart bend bright refr colfg coldim colwarn colbg dwtrain
+//       dwbus dwriver dwclock dwwx wlat wlon wname nmode
 
 #include "config.h"
 #include "app_config.h"   // compile-time defaults
@@ -41,6 +41,7 @@ void load_from_nvs(Config& c) {
     c.tz          = prefs.getString("tz",   "");
     c.bus_stop    = prefs.getString("bus",  "");
     c.bus_line    = prefs.getString("busln", "");
+    c.bus_budget  = prefs.getInt("busbdg", 0);   // 0 = unmetered (TfL)
     c.river_pier  = prefs.getString("riv",   "");
     c.river_line  = prefs.getString("rivln", "");
     c.river_name  = prefs.getString("rivnm", "");
@@ -84,6 +85,7 @@ void stage_kv(const String& kv) {
     else if (k == "tz")     g_stage.tz         = v;
     else if (k == "bus")    g_stage.bus_stop   = v;
     else if (k == "busline") g_stage.bus_line  = v;
+    else if (k == "busbudget") g_stage.bus_budget = v.toInt();
     else if (k == "river")  g_stage.river_pier = v;
     else if (k == "riverline") g_stage.river_line = v;
     else if (k == "rivername") g_stage.river_name = v;
@@ -122,6 +124,7 @@ void commit_and_reboot() {
     prefs.putString("tz",   g_stage.tz);
     prefs.putString("bus",  g_stage.bus_stop);
     prefs.putString("busln", g_stage.bus_line);
+    prefs.putInt("busbdg", g_stage.bus_budget);
     prefs.putString("riv",   g_stage.river_pier);
     prefs.putString("rivln", g_stage.river_line);
     prefs.putString("rivnm", g_stage.river_name);
@@ -213,6 +216,10 @@ void handle_line(String line) {
         Serial.print("plat=");   Serial.println(g_cfg.platform);
         Serial.print("bus=");    Serial.println(g_cfg.bus_stop);
         Serial.print("busline="); Serial.println(g_cfg.bus_line);
+        Serial.print("busbudget="); Serial.println(g_cfg.bus_budget);
+        // The interval the budget actually works out to, so a user can see what
+        // they bought without doing the arithmetic themselves.
+        Serial.print("busevery="); Serial.println(g_cfg.bus_interval(BUS_REFRESH_SECONDS));
         Serial.print("river=");  Serial.println(g_cfg.river_pier);
         Serial.print("riverline="); Serial.println(g_cfg.river_line);
         Serial.print("rivername="); Serial.println(g_cfg.river_name);

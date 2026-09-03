@@ -23,6 +23,13 @@ struct Config {
     int    brightness  = 180;  // 0-255
     int    refresh     = 60;   // poll interval, seconds
 
+    // Requests per day the bus feed is allowed (0 = unmetered). TfL's Countdown
+    // feed is keyless and uncapped, so it leaves this at 0 and polls on a fixed
+    // interval. A metered provider is paced from this instead — see
+    // bus_interval() — which is why the number is a request count and not a
+    // number of seconds: the allowance is the thing the provider actually sells.
+    int    bus_budget  = 0;
+
     // Appearance and rotation timing. Every one of these is optional: -1 means
     // "not set", and the firmware falls back to the app_config.h default. That
     // is what keeps a board provisioned before these existed looking exactly as
@@ -104,6 +111,28 @@ struct Config {
 
     // Blank hours show the dimmed clock unless explicitly told to go dark.
     bool night_clock() const { return night_mode != 0; }
+
+    // Hours a day the board is actually showing departures — the whole day, less
+    // the blank window. A metered feed's daily allowance is divided across these
+    // hours rather than across all 24, so none of it is spent overnight on a
+    // screen nobody is looking at.
+    int on_hours() const {
+        if (blank_start < 0 || blank_end < 0) return 24;   // never blanks
+        int blank = blank_end - blank_start;
+        if (blank < 0) blank += 24;                        // wraps past midnight
+        if (blank <= 0 || blank >= 24) return 24;
+        return 24 - blank;
+    }
+
+    // Seconds between bus polls. An unmetered feed keeps `fallback` exactly as
+    // it is; a metered one spreads bus_budget requests evenly over on_hours(),
+    // and `fallback` becomes a floor so a generous allowance can never make the
+    // board poll faster than the upstream cache is worth.
+    int bus_interval(int fallback) const {
+        if (bus_budget <= 0) return fallback;
+        int secs = on_hours() * 3600 / bus_budget;
+        return secs > fallback ? secs : fallback;
+    }
 
     // Usable once there is WiFi and at least one service to show. A river-only
     // board is fully provisioned with no API key and no station at all, and a

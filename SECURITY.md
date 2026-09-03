@@ -62,6 +62,12 @@ by the flasher, which is precisely the contents of `firmware.bin`.
   own upstream cache — 30s for TfL buses, 15 minutes for weather. Being a good
   citizen of free APIs is a security property too: the fastest way to lose
   access is to look like an attack.
+- **A metered feed is paced by its allowance, not by a guess.** Where a provider
+  sells requests per day, the board is given the number and derives its own
+  interval: the allowance spread evenly across the hours the screen is on, with
+  nothing spent overnight and failed attempts counted against it like any other.
+  A board cannot exceed a quota it was told about, however badly the network
+  behaves.
 
 ## Secrets
 

@@ -11,7 +11,7 @@
 // them. See config.cpp's `stage_kv`.
 export const KEYS = [
   'ssid', 'pass', 'key', 'dep', 'dest', 'plat', 'tz',
-  'bus', 'busline', 'river', 'riverline', 'rivername', 'mode',
+  'bus', 'busline', 'busbudget', 'river', 'riverline', 'rivername', 'mode',
   'bstart', 'bend', 'bright', 'refr',
   'colfg', 'coldim', 'colwarn', 'colbg',
   'dwtrain', 'dwbus', 'dwriver', 'dwclock', 'dwwx',
@@ -99,6 +99,10 @@ export function defaultConfig() {
     ssid: '', pass: '', key: '', dep: '', dest: '', plat: '',
     tz: tz === 'Europe/London' ? 'GMT0BST,M3.5.0/1,M10.5.0' : '',
     bus: '', busline: '', river: '', riverline: '', rivername: '',
+    // Requests per day the bus feed may spend. 0 means unmetered, which is what
+    // TfL's keyless feed is; a metered provider replaces this with its allowance
+    // and the board paces itself to fit.
+    busbudget: 0,
     services: ['train'],
     onHour: 6, offHour: 22,      // converted to bstart/bend on the way out
     bright: 180, refr: 60,
@@ -144,6 +148,7 @@ export function toDeviceConfig(ui) {
     tz: ui.tz || '',
     bus: pruned.includes('bus') ? ui.bus : '',
     busline: pruned.includes('bus') ? (ui.busline || '') : '',
+    busbudget: pruned.includes('bus') ? (ui.busbudget || 0) : 0,
     river: pruned.includes('river') ? ui.river : '',
     riverline: pruned.includes('river') ? (ui.riverline || '') : '',
     rivername: pruned.includes('river') ? (ui.rivername || '') : '',

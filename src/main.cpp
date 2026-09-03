@@ -148,7 +148,14 @@ static uint32_t fetchTrainsOnce() {
     return wait;
 }
 
-// Poll the TfL bus feed once and publish the result. Returns how long to wait.
+// Never wait less than the bus feed's budgeted interval. On an unmetered feed
+// this is the identity function, so TfL's back-off behaviour is untouched.
+static uint32_t busWait(uint32_t ms, uint32_t intervalMs) {
+    if (cfg::get().bus_budget <= 0) return ms;
+    return ms < intervalMs ? intervalMs : ms;
+}
+
+// Poll the bus feed once and publish the result. Returns how long to wait.
 static uint32_t fetchBusesOnce() {
     std::vector<BusArrival> arrivals;
     String stopName;
@@ -175,16 +182,22 @@ static uint32_t fetchBusesOnce() {
     int fails = g_busErrCount;
     xSemaphoreGive(g_mutex);
 
+    uint32_t interval = (uint32_t)cfg::get().bus_interval(BUS_REFRESH_SECONDS) * 1000UL;
+
     if (ok) {
-        Serial.printf("[bus] ok: %d arrivals at %s\n", (int)arrivals.size(), stopName.c_str());
-        return BUS_REFRESH_SECONDS * 1000UL;
+        Serial.printf("[bus] ok: %d arrivals at %s (next poll in %us)\n",
+                      (int)arrivals.size(), stopName.c_str(), interval / 1000);
+        return interval;
     }
     if (st == bus::Fetch::BadStop) {
         Serial.printf("[bus] unknown stop code '%s' - bus screen disabled until reconfigured\n",
                       cfg::get().bus_stop.c_str());
-        return 300000;   // a wrong code will not fix itself; check back rarely
+        return busWait(300000, interval);   // a wrong code will not fix itself
     }
-    uint32_t wait = backoffMs(fails);
+    // A failed attempt still costs a request, so a metered feed cannot back off
+    // any faster than its budget allows — otherwise a flaky evening would spend
+    // the whole day's allowance on retries.
+    uint32_t wait = busWait(backoffMs(fails), interval);
     Serial.printf("[bus] failed (%d) - retry in %us\n", fails, wait / 1000);
     return wait;
 }
@@ -267,6 +280,18 @@ static uint32_t fetchWeatherOnce() {
     return wait;
 }
 
+static bool isBlankHour();
+
+// A metered bus feed must not spend requests while the screen is blank. Its
+// allowance is divided across Config::on_hours() precisely so that none of it
+// goes on hours nobody is looking; polling through the blank window would
+// overspend the day by exactly those hours. Deferring rather than consuming
+// also means the first poll after the screen wakes is immediate, because the
+// deadline has been sitting in the past all night.
+static bool busPollAllowed() {
+    return cfg::get().bus_budget <= 0 || !isBlankHour();
+}
+
 static void fetchTask(void*) {
     // Signed deadline comparisons, so the scheduler survives millis() wrapping.
     uint32_t nextTrain = millis();
@@ -280,7 +305,8 @@ static void fetchTask(void*) {
         if (cfg::get().train_enabled() && (int32_t)(millis() - nextTrain) >= 0) {
             nextTrain = millis() + fetchTrainsOnce();
         }
-        if (cfg::get().bus_enabled() && (int32_t)(millis() - nextBus) >= 0) {
+        if (cfg::get().bus_enabled() && busPollAllowed() &&
+            (int32_t)(millis() - nextBus) >= 0) {
             nextBus = millis() + fetchBusesOnce();
         }
         if (cfg::get().river_enabled() && (int32_t)(millis() - nextRiver) >= 0) {

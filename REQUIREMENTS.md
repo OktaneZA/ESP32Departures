@@ -237,6 +237,9 @@ itself never calls them:
 | BUS-15 | The stop code and route filter are percent-encoded into the query string. (The feed additionally defines escaping \`a` for `&` and \`c` for `,` inside *values*; neither character is valid in a stop code or route name, so it does not arise) |
 | BUS-16 | Stops whose `StopCode1` is null or the literal string `"NONE"` are bus stands or withdrawn stops, not boardable, and are excluded from search results |
 | BUS-17 | Polling is no more frequent than `BUS_REFRESH_SECONDS` (30 s), matching the feed's cache — faster polling returns identical data |
+| BUS-18 | A provider that meters requests **per day** rather than per second is paced from a daily allowance (`busbudget`): the interval is that allowance divided evenly across the hours the screen is on, floored at `BUS_REFRESH_SECONDS`. `busbudget = 0` means unmetered and leaves the fixed interval exactly as it was, which is what the keyless TfL feed uses |
+| BUS-19 | A metered feed does **not** poll during blank hours. The allowance is divided across on-hours precisely so none of it is spent on a dark screen; the deferred deadline sits in the past overnight, so the first poll after the screen wakes is immediate |
+| BUS-20 | On a metered feed a **failed** attempt also costs a request, so the exponential back-off and the unknown-stop retry are both floored at the budgeted interval — a flaky network cannot spend the day's allowance on retries |
 
 ---
 
@@ -329,6 +332,7 @@ setup" having silently lost its WiFi, API key and station.
 | `mode` | No | `train,bus` | Comma-separated set of services to show, e.g. `train,bus,river` |
 | `bus` | No | - | TfL bus stop SMS code (empty = no bus screen at all) |
 | `busline` | No | - | Bus route filter, e.g. `38` (empty = every route at the stop) |
+| `busbudget` | No | `0` | Requests per day the bus feed may spend. `0` = unmetered (TfL). Any positive value paces polling to fit: the allowance spread evenly across the hours the screen is on (BUS-18) |
 | `river` | No | - | TfL pier Naptan **port** ID, e.g. `930GCAW` (empty = no river screen at all) |
 | `riverline` | No | - | River route filter, e.g. `RB1` (empty = every route at the pier) |
 | `rivername` | No | - | Friendly pier name, stored by the installer so a pier with nothing due still shows a name |
@@ -416,7 +420,7 @@ Newline-terminated line protocol on the USB CDC serial port (`src/config.cpp`).
 | PROV-01 | `PING` → `PONG Departure Buddy` (discovery/handshake). The installer matches the bare `PONG` token, never the product name after it, so the banner is informational — a rename does not stop a new installer recognising an old board, or an old installer a new one |
 | PROV-02 | `CFG <key>=<value>` → `ACK <key>` (stages a value) |
 | PROV-03 | `COMMIT` → `SAVED`, then the device saves to NVS and reboots |
-| PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `river`, `riverline`, `rivername`, `mode`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
+| PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `busbudget`, `busevery`, `river`, `riverline`, `rivername`, `mode`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
 | PROV-05 | Protocol available whether provisioned or not, so reconfiguration always works |
 | PROV-06 | Host opens serial with `dtr=True, rts=False` to avoid resetting the ESP32-S3 |
 | PROV-07 | `GET` never returns a secret: the API key is not reported at all and the WiFi password only as `passlen` (its length), which distinguishes an empty or truncated password from a wrong one |

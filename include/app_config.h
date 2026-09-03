@@ -46,6 +46,11 @@
 
 // How often to poll TfL for fresh arrivals (seconds). TfL caches predictions
 // for 30s at source, so polling faster than this returns identical data.
+//
+// Providers outside London meter by the day rather than the second. When a daily
+// allowance is provisioned (Config::bus_budget) the interval is derived from it
+// instead — the allowance spread evenly across the hours the screen is actually
+// on — and this value becomes the floor rather than the interval.
 #define BUS_REFRESH_SECONDS   30
 
 // Ignore arrivals further out than this (minutes). The feed looks 30 minutes

@@ -312,8 +312,8 @@ python installer.py --auto cfg.json
 ```
 
 where `cfg.json` has `port`, `flash`, and any of the settings keys
-(`ssid pass key dep dest plat tz bus busline river riverline rivername mode
-bstart bend bright refr`). `mode` is a comma-separated set — `train`, `bus`,
+(`ssid pass key dep dest plat tz bus busline busbudget river riverline rivername
+mode bstart bend bright refr`). `mode` is a comma-separated set — `train`, `bus`,
 `river`, or any combination such as `train,bus,river`. The older exclusive
 values (`both`, or a lone `train`/`bus`) are still accepted.
 
@@ -326,6 +326,13 @@ A key you **leave out** keeps whatever the board already has; pass an explicit
 
 `bus` is the stop's 5-digit code and `busline` an optional route filter; `"bus": ""`
 gives a train-only board.
+
+`busbudget` is how many requests a day the bus feed may spend. Leave it `0` for
+TfL, which is keyless and uncapped and polls every 30 seconds. Set it to a
+provider's daily allowance and the board paces itself: the allowance divided
+evenly across the hours the screen is on, and nothing spent overnight. So `30`
+on a board that is on 06:00–22:00 works out at one poll every 32 minutes, and
+`300` at one every 3.2 minutes.
 
 ## Notes
 

@@ -38,7 +38,7 @@ ESPRESSIF_VID = 0x303A
 # already dropped settings on the floor twice.
 CONFIG_KEYS = (
     "ssid", "pass", "key", "dep", "dest", "plat", "tz",
-    "bus", "busline", "river", "riverline", "rivername", "mode",
+    "bus", "busline", "busbudget", "river", "riverline", "rivername", "mode",
     "bstart", "bend", "bright", "refr",
     "colfg", "coldim", "colwarn", "colbg",
     "dwtrain", "dwbus", "dwriver", "dwclock", "dwwx",
