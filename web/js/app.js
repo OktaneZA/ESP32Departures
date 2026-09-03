@@ -652,10 +652,21 @@ async function connectAndConfigure() {
 
     const device = cfg.toDeviceConfig(ui);
     logLine(`Sending ${Object.keys(device).length} settings…`);
-    const saved = await board.provision(device, cfg.KEYS, (done, total, key) => {
+    const { saved, rejected } = await board.provision(device, cfg.KEYS, (done, total, key) => {
       if (key === 'mode') logLine(`  showing: ${device.mode}`);
       if (done === total) logLine(`Sent all ${total} settings.`);
     });
+
+    // A board on older firmware refuses the settings it has never heard of. It
+    // still saves the rest and still says SAVED, so without this the page would
+    // claim success for a config that was half thrown away.
+    if (rejected.length) {
+      logLine(`Your board refused ${rejected.length} setting${rejected.length > 1 ? 's' : ''}: `
+        + rejected.join(', '), 'bad');
+      logLine('That means it is running older firmware than this page expects. '
+        + 'Flash the firmware (tick "Update the firmware" above) and set it up again '
+        + '— otherwise screens, buttons and colours will not work as configured.', 'bad');
+    }
 
     if (!saved) {
       logLine('The board didn’t confirm the save. Try again, or replug it.', 'bad');

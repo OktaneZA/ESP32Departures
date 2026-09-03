@@ -117,18 +117,27 @@ export class Board {
   }
 
   // Send the config and commit it. `onProgress(done, total, key)` is optional.
-  // Returns true once the board answers SAVED.
+  // Returns { saved, rejected } -- rejected being the keys the board answered
+  // `ERR key` to.
+  //
+  // Those used to be discarded, which made a board running older firmware look
+  // perfectly configured: it ACKed the settings it knew, ERRed the rest, and the
+  // page reported success while half the config went nowhere. The symptom shows
+  // up much later as a board that will not cycle screens or respond to buttons.
   async provision(cfg, keys, onProgress) {
     const entries = keys.filter((k) => cfg[k] !== undefined && cfg[k] !== null);
+    const rejected = [];
     let done = 0;
     for (const k of entries) {
       await this.write(`CFG ${k}=${cfg[k]}`);
-      await this.readUntil((l) => l.startsWith('ACK ') || l.startsWith('ERR '), 500);
+      const lines = await this.readUntil(
+        (l) => l.startsWith('ACK ') || l.startsWith('ERR '), 500);
+      if (lines.some((l) => l.startsWith('ERR key'))) rejected.push(k);
       onProgress?.(++done, entries.length, k);
     }
     await this.write('COMMIT');
     const lines = await this.readUntil((l) => l.includes('SAVED'), 5000);
-    return lines.some((l) => l.includes('SAVED'));
+    return { saved: lines.some((l) => l.includes('SAVED')), rejected };
   }
 
   // The MD5 of the firmware actually running, so it can be checked against the

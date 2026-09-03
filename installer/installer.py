@@ -970,6 +970,7 @@ def provision(port, cfg, wait_boot=20.0):
             print("  ! board did not respond (no PONG)")
             return False
 
+        rejected = []
         for key in CONFIG_KEYS:
             # None means "leave whatever the board already has". The firmware
             # stages a COMMIT on top of its current config, so simply not
@@ -977,10 +978,23 @@ def provision(port, cfg, wait_boot=20.0):
             if cfg.get(key) is None:
                 continue
             ser.write(f"CFG {key}={cfg[key]}\n".encode())
-            read_lines(ser, 0.25)
+            # A board on older firmware answers "ERR key <name>" for the
+            # settings it has never heard of, then saves the rest and still
+            # says SAVED. Discarding that made a half-applied config look
+            # like a clean one - the symptom only shows up much later, as a
+            # board that will not cycle screens or answer its buttons.
+            if any(l.startswith("ERR key") for l in read_lines(ser, 0.25)):
+                rejected.append(key)
 
         ser.write(b"COMMIT\n")
-        return any("SAVED" in l for l in read_lines(ser, 4))
+        saved = any("SAVED" in l for l in read_lines(ser, 4))
+        if rejected:
+            print(f"\n  ! The board refused {len(rejected)} setting(s): "
+                  + ", ".join(rejected))
+            print("    It is running older firmware than this installer expects.")
+            print("    Re-run and choose 'Update firmware AND change settings',")
+            print("    or screens, buttons and colours will not work as set.")
+        return saved
     finally:
         ser.close()
 
