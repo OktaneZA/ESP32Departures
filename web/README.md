@@ -88,13 +88,6 @@ plain multi-file site, not a client-routed SPA: a missing firmware file must
 return a real 404 so the page can say "no firmware published here", rather than
 being handed `index.html` and failing to parse it as JSON.
 
-## Deploy to GitHub Pages instead
-
-`.github/workflows/pages.yml` does the same job. It needs Pages enabling once by
-hand — **Settings → Pages → Build and deployment → Source: GitHub Actions** —
-and will fail on every push until you do. If you are using Azure, delete that
-workflow.
-
 ## Layout
 
 | Path | What it is |

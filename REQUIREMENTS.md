@@ -492,9 +492,10 @@ PyInstaller) that flashes the firmware and provisions the board.
 
 ## 8a. Web Configurator
 
-A static single-page app (`web/`) published to GitHub Pages, which configures a
-board either directly over Web Serial or by exporting a settings file for the
-installer.
+A static single-page app (`web/`) published to Azure Static Web Apps, which
+configures a board either directly over Web Serial or by exporting a settings
+file for the installer. Azure serves it over HTTPS automatically, which browser
+flashing requires: Web Serial only works in a secure context.
 
 | ID | Requirement |
 |---|---|
