@@ -64,9 +64,27 @@ export async function fetchImages(manifest, onProgress) {
   return parts;
 }
 
+// Which family a chip name belongs to, matching the `chip` field in a manifest.
+//
+// esptool reports a specific part -- "ESP32-D0WD-V3", "ESP32-S3" -- while a
+// manifest names a family. The S3 check has to come first: its name contains
+// "ESP32" too, and testing that first would call every board a classic ESP32.
+function chipFamily(name) {
+  const n = String(name || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (n.includes('ESP32S3')) return 'esp32s3';
+  if (n.includes('ESP32S2')) return 'esp32s2';
+  if (n.includes('ESP32C3')) return 'esp32c3';
+  if (n.includes('ESP32C6')) return 'esp32c6';
+  if (n.includes('ESP32H2')) return 'esp32h2';
+  if (n.includes('ESP32')) return 'esp32';
+  return null;
+}
+
 // Flash `port` (a raw SerialPort that must NOT be open). Returns the chip name.
 // `onStatus(text)` for prose, `onProgress(fraction)` for the 0..1 bar.
-export async function flash(port, parts, onStatus, onProgress) {
+// `expectChip` is the manifest's chip family; writing is refused if the board
+// on the other end is not that.
+export async function flash(port, parts, onStatus, onProgress, expectChip) {
   const transport = new Transport(port, true);
   // esptool-js expects a terminal-ish sink; route it to the status callback so
   // the user sees the real chip detection and erase messages.
@@ -88,6 +106,22 @@ export async function flash(port, parts, onStatus, onProgress) {
   try {
     chip = await loader.main();
     onStatus?.(`Detected ${chip}.`);
+
+    // Refuse before writing a byte. Firmware for the wrong chip is not merely
+    // useless: the bootloader belongs at a different offset (0x0000 on an S3,
+    // 0x1000 on a classic ESP32), so a mismatched flash leaves the board
+    // unbootable and needing a recovery flash. esptool has already told us what
+    // this board is, and the manifest says what the images are for, so there is
+    // no reason to find out the hard way.
+    const found = chipFamily(chip);
+    const want = String(expectChip || '').toLowerCase();
+    if (want && found && found !== want) {
+      const e = new Error(
+        `This firmware is for ${want}, but the board is ${chip} (${found}). `
+        + 'Nothing has been written. Choose the right board and try again.');
+      e.chipMismatch = true;
+      throw e;
+    }
 
     const total = parts.reduce((n, p) => n + p.data.length, 0);
     const written = new Array(parts.length).fill(0);

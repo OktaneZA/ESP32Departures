@@ -789,11 +789,30 @@ async function flashFirmware(port) {
       (frac) => {
         const pct = Math.floor(frac * 100 / 5) * 5;   // log every 5%
         if (pct !== lastPct) { lastPct = pct; logLine(`  writing… ${pct}%`); }
-      });
+      },
+      // What these images are for. The flasher compares it against the chip it
+      // detects and refuses rather than bricking a board with the wrong build.
+      manifest.chip);
     logLine('Firmware written.', 'ok');
     return true;
   } catch (e) {
-    logLine('Flashing failed: ' + (e?.message || e), 'bad');
+    if (e?.chipMismatch) {
+      logLine(e.message, 'bad');
+      logLine('Nothing was written, so the board is exactly as it was.');
+      return false;
+    }
+    // The board could not be put into its ROM download mode. On boards with no
+    // auto-program circuit -- which includes many ESP32 clones -- that is not a
+    // fault, it just means the BOOT button has to be held by hand.
+    const msg = String(e?.message || e);
+    if (/boot mode|download mode/i.test(msg)) {
+      logLine('The board did not enter its programming mode.', 'bad');
+      logLine('Hold down the BOOT button on the board, press "Flash the '
+        + 'firmware" again, and keep holding until the log says it detected '
+        + 'the chip. Some boards cannot switch themselves over.');
+      return false;
+    }
+    logLine('Flashing failed: ' + msg, 'bad');
     return false;
   }
 }
