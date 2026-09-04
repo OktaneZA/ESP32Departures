@@ -2,11 +2,10 @@
 
 ## Overview
 
-**Departure Buddy** is a UK National Rail departure board that runs on a **LilyGo
-T-Display-S3** (ESP32-S3) microcontroller. It fetches live departures over WiFi
-directly from the National Rail Live Departure Board (LDBWS) JSON API and renders
-them on the board's built-in 170×320 colour LCD — no host computer, server, or
-cloud service.
+**Departure Buddy** is a UK National Rail departure board that runs on one of two
+ESP32 boards (see 1. Hardware). It fetches live departures over WiFi directly
+from the National Rail Live Departure Board (LDBWS) JSON API and renders them on
+the board's built-in colour LCD — no host computer, server, or cloud service.
 
 It can also show **live London bus arrivals** for one bus stop, from TfL's open
 Countdown feed, and **live river boat sailings** for one Thames pier — Uber Boat
@@ -44,26 +43,38 @@ the delivered firmware and installer actually satisfy.
 
 ## 1. Hardware Requirements
 
-| Component | Requirement |
+Two boards are supported. Everything that differs between them lives behind
+`include/board.h`; see [docs/boards.md](docs/boards.md) for the detail.
+
+| Component | LilyGo T-Display-S3 | ESP32 Cheap Yellow Display |
+|---|---|---|
+| **Board id** | `tdisplay-s3` | `cyd` (ESP32-2432S028R) |
+| **MCU** | ESP32-S3, dual-core | ESP32-D0WD-V3, dual-core |
+| **WiFi** | **2.4 GHz only** (no 5 GHz) | **2.4 GHz only** (no 5 GHz) |
+| **Display** | 1.9″ ST7789, **170×320**, 8-bit parallel (i80) | 2.8″ ST7789 or ILI9341, **240×320**, SPI |
+| **Memory** | 16 MB flash, 8 MB PSRAM | 4 MB flash, **no PSRAM** |
+| **USB** | USB-C, native USB | Micro-USB via a CH340 bridge (`1A86:7523`) |
+| **Input** | Two buttons (GPIO0, GPIO14) | Resistive touch (XPT2046) |
+| **Wiring** | None — all on-board | None — all on-board |
+
+| ID | Requirement |
 |---|---|
-| **Board** | LilyGo T-Display-S3 (ESP32-S3) |
-| **MCU** | ESP32-S3, dual-core, **2.4 GHz WiFi only** (no 5 GHz) |
-| **Display** | 1.9″ ST7789 colour LCD, **170×320**, 8-bit parallel (i80) bus |
-| **Memory** | 16 MB flash, 8 MB PSRAM |
-| **USB** | USB-C (native USB — used for flashing and configuration) |
-| **Wiring** | None — LCD, WiFi, and USB are on-board |
 
 Incompatible look-alikes (different display/driver): T-Display-S3 **AMOLED**
-(1.91″), **Pro** (2.33″), **Long** (3.4″), and the older ESP32 **T-Display** (1.14″).
+(1.91″), **Pro** (2.33″), **Long** (3.4″), and the older ESP32 **T-Display**
+(1.14″). For the CYD family, the 3.5″ and 4.3″ boards are not supported.
 
 ### Board-specific notes
 
 | ID | Requirement |
 |---|---|
-| HW-01 | Panel power is gated on **GPIO15** — firmware drives it HIGH at boot |
-| HW-02 | Panel config: ST7789, offset_x 35, `invert=true`, 8-bit parallel bus (pins per `display.cpp`) |
-| HW-03 | Backlight on GPIO38 via PWM; brightness is runtime-configurable (0–255) |
-| HW-04 | Rendered in landscape (rotation 1) → 320×170 usable canvas |
+| HW-01 | *(T-Display-S3)* Panel power is gated on **GPIO15** — firmware drives it HIGH at boot. The CYD gates nothing, so this is a per-board pin rather than a fact about the product |
+| HW-02 | *(T-Display-S3)* Panel config: ST7789, offset_x 35, `invert=true`, 8-bit parallel bus. The CYD is ST7789 or ILI9341 on SPI with `invert=false`; both live in `include/boards/` |
+| HW-03 | Backlight via PWM, brightness runtime-configurable (0–255). GPIO38 on the T-Display-S3, GPIO21 on the CYD |
+| HW-04 | Rendered in landscape (rotation 1): 320×170 on the T-Display-S3, 320×240 on the CYD. Row counts and the clock's size follow from it |
+| HW-05 | The bootloader offset differs by chip: `0x0000` on the ESP32-S3, `0x1000` on the classic ESP32, which reserves the first 4 KB. Images and offsets are published together per board so they cannot be paired wrongly |
+| HW-06 | The CYD has **no working auto-program circuit** on the units seen: the ROM reports `boot:0x13` whether DTR is asserted or not while the chip resets on command, so RTS reaches EN and DTR does not reach GPIO0. Flashing requires BOOT held, and both flashers say so |
+| HW-07 | The CYD ships with either display controller under one product name. ST7789 is the default; `-DCYD_PANEL_ILI9341` selects the older one. Panel reads are disabled: MISO is IO12, a strapping pin these boards often leave unwired, and the identification registers answer with plausible nonsense |
 
 ---
 

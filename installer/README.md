@@ -1,6 +1,6 @@
 # Departure Buddy Installer
 
-A self-contained **Windows 10/11** installer for the LilyGo T-Display-S3 departure
+A self-contained **Windows 10/11** installer for the Departure Buddy departure
 board. It flashes the firmware and configures it (WiFi, National Rail LDBWS key,
 station, filters, an optional bus stop anywhere in the UK, an optional Thames pier, blank
 hours, brightness) over USB — **no Python, PlatformIO, or toolchain needed** on
@@ -35,15 +35,20 @@ commit — so the installer and the board it flashes always match.
 
 You need two things, both covered elsewhere:
 
-- **The board** — a LilyGo T-Display-S3. Which one to buy and where is on the
-  [front page](../README.md#1-buy-the-board).
+- **A board** — a LilyGo T-Display-S3 or an ESP32 Cheap Yellow Display. Which
+  to buy and where is on the [front page](../README.md#1-buy-a-board); what
+  differs between them is in [docs/boards.md](../docs/boards.md).
+
+  > This installer currently flashes the **T-Display-S3 only**. For a Cheap
+  > Yellow Display, use the [web configurator](https://tinyurl.com/bdddxxr4),
+  > which publishes firmware for both.
 - **A train data key** — free, from the Rail Data Marketplace. Step-by-step with
   screenshots: **[Getting your train data key](../docs/api-key.md)**. Skip it
   entirely for a buses-or-boats-only board; those feeds need no key.
 
 ## For end users
 
-1. Plug the T-Display-S3 into a USB-C port.
+1. Plug the board into a USB port.
 2. Double-click **`DepartureBuddyInstaller.exe`**.
 3. Follow the prompts (it auto-detects the board's COM port).
 4. When it says *Done*, the board reboots and shows live departures.

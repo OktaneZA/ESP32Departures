@@ -2,8 +2,8 @@
 
 **A live departure board for your desk.** Real UK train departures, London bus
 arrivals and Thames river boat sailings — on a small screen, updating by itself.
-No coding. No soldering. About £15 of hardware and ten minutes — all you need is
-a [LilyGo T-Display-S3](https://www.amazon.co.uk/LILYGO-T-Display-S3-ESP32-S3-Display-Development/dp/B0BRTT727Z?th=1&linkCode=ll2&tag=oktaneza-21&linkId=5466662ac0076e3e099592eae3f54ffc&ref_=as_li_ss_tl) and a USB-C cable.
+No coding. No soldering. About £15 of hardware and ten minutes — all you need
+is **one of two supported boards** and a USB cable.
 
 ![The train screen running on the board](docs/Train.jpg)
 
@@ -37,23 +37,88 @@ brightness for a few seconds.
 
 ---
 
-## 1. Buy the board
+## 1. Buy a board
 
-You need one thing: a **LilyGo T-Display-S3** — around **£12–20**.
+Two boards are supported. Either works fully — same screens, same setup page,
+same live data. Pick on size and price.
 
-### → [Buy on Amazon UK](https://www.amazon.co.uk/LILYGO-T-Display-S3-ESP32-S3-Display-Development/dp/B0BRTT727Z?th=1&linkCode=ll2&tag=oktaneza-21&linkId=5466662ac0076e3e099592eae3f54ffc&ref_=as_li_ss_tl) 
-(Its an affiliate link and its the only kickback I get for maintaining this project)
+| | **LilyGo T-Display-S3** | **ESP32 Cheap Yellow Display** |
+|---|---|---|
+| Screen | 1.9″, 320×170 | 2.8″, 320×240 |
+| Rows shown | 3 departures | **4 departures** |
+| Buttons | **Two**, on the front | None usable |
+| Touchscreen | No | Yes, resistive (see below) |
+| Chip | ESP32-S3, 16 MB flash, PSRAM | ESP32, 4 MB flash, no PSRAM |
+| Flashing | Plug in and go | **Hold its BOOT button** |
+| Price | ~£12–20 | ~£12–18 |
 
-Also from [LilyGo directly](https://lilygo.cc/en-us/products/t-display-s3) or
-[AliExpress (official store)](https://www.aliexpress.com/item/1005004496543314.html)
+### → [Buy the T-Display-S3 on Amazon UK](https://www.amazon.co.uk/LILYGO-T-Display-S3-ESP32-S3-Display-Development/dp/B0BRTT727Z?th=1&linkCode=ll2&tag=oktaneza-21&linkId=5466662ac0076e3e099592eae3f54ffc&ref_=as_li_ss_tl)
+### → [Buy the Cheap Yellow Display on Amazon UK](https://www.amazon.co.uk/dp/B0F24X83FC?tag=oktaneza-21)
+
+(They're affiliate links and they're the only kickback I get for maintaining
+this project)
+
+Full detail on what differs between them, and why, is in
+[docs/boards.md](docs/boards.md).
+
+The setup page asks which board you have and sends the right firmware. It also
+checks: if the board on the cable is not the one you picked, it refuses to write
+anything rather than leaving you with a board that will not boot.
+
+---
+
+### LilyGo T-Display-S3
+
+The smaller, tidier one. Also from [LilyGo directly](https://lilygo.cc/en-us/products/t-display-s3)
+or [AliExpress (official store)](https://www.aliexpress.com/item/1005004496543314.html)
 — cheaper, but slower to arrive.
 
 Get the standard **1.9″ 170×320** version. The Touch edition works too. Choose
 **pin headers pre-soldered** unless you want to solder. Nothing else to buy —
 screen, WiFi and USB-C are all on board.
 
+Its two front buttons work: one holds the big clock on screen, the other steps
+to the next panel.
+
 > ⚠️ Don't buy the look-alikes: **AMOLED** (1.91″), **Pro** (2.33″), **Long**
 > (3.4″), or the older **T-Display** (ESP32, 1.14″). None of them work with this.
+
+---
+
+### ESP32 Cheap Yellow Display (ESP32-2432S028R)
+
+Bigger screen for about the same money, and the extra height buys a fourth row
+of departures. Sold under many names; look for the model number
+**ESP32-2432S028R** and the distinctive yellow circuit board.
+
+![Trains on the Cheap Yellow Display](docs/cyd-train.jpg)
+
+*Four departures at once, with cancellations in red — a row more than the
+smaller board fits.*
+
+![Buses on the Cheap Yellow Display](docs/cyd-bus.jpg)
+
+![Weather on the Cheap Yellow Display](docs/cyd-weather.jpg)
+
+*(Case not included — that one is 3D printed.)*
+
+Three things to know before you buy:
+
+- **You must hold the BOOT button to flash it.** Most of these boards have no
+  working auto-program circuit, so they cannot put themselves into programming
+  mode. The setup page tells you when to hold it. After that, changing settings
+  needs no button at all.
+- **The touchscreen may not be connected.** The panel is wired for resistive
+  touch, but on the unit tested here the touch layer reads as an open circuit —
+  a known fault on some clones, where the ribbon is not seated. Everything else
+  works; you just get no buttons and no touch, so the board simply cycles
+  through your screens.
+- **Two display controllers ship under the same name.** The firmware handles
+  both, so this does not affect what you buy — it is only why the code carries a
+  build flag for it.
+
+> ⚠️ This is the **2.8″ resistive** model, `ESP32-2432S028R`. The larger 3.5″
+> and 4.3″ boards in the same family are not supported.
 
 ---
 

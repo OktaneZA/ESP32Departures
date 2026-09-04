@@ -647,6 +647,39 @@ void renderClock(bool night, int driftX, int driftY) {
     lcd.setBrightness(night ? NIGHT_BRIGHTNESS : s_brightness);
 }
 
+// Print text at (x, y), drawing every degree sign rather than typing it.
+// Returns the width used, so a caller can lay something out after it.
+//
+// The weather rows use LovyanGFX's built-in FreeSans faces, and those bake only
+// 0x20..0x7E -- so "\xB0" produced a blank or a stray bar where the degree should
+// be, on both boards. A degree sign is a small ring anyway, so it is cheaper to
+// draw one than to bake 49 unused glyphs to reach it.
+int printWithDegrees(int x, int y, const String& text) {
+    const int fh = spr.fontHeight();
+    const int r = fh >= 40 ? 5 : (fh >= 20 ? 3 : 2);
+    int cx = x;
+    int start = 0;
+    for (;;) {
+        const int i = text.indexOf('\xB0', start);
+        const String chunk = (i < 0) ? text.substring(start) : text.substring(start, i);
+        if (chunk.length()) {
+            spr.setCursor(cx, y);
+            spr.print(chunk);
+            cx += spr.textWidth(chunk);
+        }
+        if (i < 0) break;
+        // Superscript, so it sits against the cap height rather than the
+        // baseline. Two rings on the larger sizes, or it looks anaemic beside
+        // a 24pt numeral.
+        const int ox = cx + r + 1, oy = y + r + 2;
+        spr.drawCircle(ox, oy, r, AMBER);
+        if (r > 2) spr.drawCircle(ox, oy, r - 1, AMBER);
+        cx += 2 * r + (r > 2 ? 5 : 3);
+        start = i + 1;
+    }
+    return cx - x;
+}
+
 void renderWeatherBoard(const Weather& wx, const String& place, int errCount) {
     spr.fillScreen(BLACK);
     drawHeader("WEATHER", place);
@@ -655,10 +688,8 @@ void renderWeatherBoard(const Weather& wx, const String& place, int errCount) {
     // temperature is sized to leave room for two detail rows underneath.
     spr.setFont(&fonts::FreeSansBold24pt7b);
     spr.setTextColor(AMBER, BLACK);
-    String temp = wx.temp.length() ? wx.temp + "\xB0" : "--";
-    spr.setCursor(0, 30);
-    spr.print(temp);
-    int tw = spr.textWidth(temp);
+    const String temp = wx.temp.length() ? wx.temp + "\xB0" : "--";
+    const int tw = printWithDegrees(0, 30, temp);
 
     if (wx.condition.length()) {
         spr.setFont(ROW_FONT);
@@ -674,12 +705,10 @@ void renderWeatherBoard(const Weather& wx, const String& place, int errCount) {
         String row = "";
         if (wx.feels.length()) row += "Feels " + wx.feels + "\xB0";
         if (wx.wind.length()) row += (row.length() ? "   " : "") + String("Wind ") + wx.wind + " mph";
-        spr.setCursor(0, 72);
-        spr.print(row);
+        printWithDegrees(0, 72, row);
     }
     if (wx.high.length() && wx.low.length()) {
-        spr.setCursor(0, 92);
-        spr.print("High " + wx.high + "\xB0   Low " + wx.low + "\xB0");
+        printWithDegrees(0, 92, "High " + wx.high + "\xB0   Low " + wx.low + "\xB0");
     }
 
 
