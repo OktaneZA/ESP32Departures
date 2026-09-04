@@ -19,6 +19,13 @@
 #endif
 #define MAX_DEPARTURES        BOARD_LIST_ROWS
 
+// Pixel size of the full-screen clock's font. Also set per board, and for the
+// same reason the row count is: it selects which baked font gets linked, so it
+// has to be visible to the preprocessor rather than only to C++.
+#ifndef BOARD_BIG_CLOCK_PX
+#define BOARD_BIG_CLOCK_PX    104
+#endif
+
 // Hide the "On time" status so the destination gets the full row width. Delays,
 // cancellations, and platform numbers are always shown. Set to 0 to always show
 // the status column (long names scroll rather than collide with it).

@@ -626,7 +626,13 @@ void renderClock(bool night, int driftX, int driftY) {
     char buf[8];
     strftime(buf, sizeof(buf), "%H:%M", &tm);
 
+    // Chosen by the preprocessor rather than at runtime so only the font this
+    // board actually draws is linked -- the 148px one alone is 10 KB.
+#if BOARD_BIG_CLOCK_PX >= 148
+    spr.setFont(&Clock_Bold_148);
+#else
     spr.setFont(&Clock_Bold_104);
+#endif
     spr.setTextColor(AMBER, BLACK);
     int tw = spr.textWidth(buf);
     int th = spr.fontHeight();

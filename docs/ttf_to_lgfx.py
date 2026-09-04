@@ -30,6 +30,10 @@ FONTS = [
     # The full-screen clock. Digits and colon only: at this size the full ASCII
     # range would cost roughly 70KB of flash to bake 84 glyphs nothing draws.
     ("Clock_Bold_104",       "Roboto-Bold.ttf",       104, DIGITS),
+    # The same clock for the 320x240 board. 104px is 61% of the S3 screen'''s
+    # height; 148 is the same proportion of 240, so the two boards look alike
+    # rather than one looking like a shrunken copy of the other.
+    ("Clock_Bold_148",       "Roboto-Bold.ttf",       148, DIGITS),
 ]
 
 
