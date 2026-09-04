@@ -29,8 +29,12 @@ namespace board {
 constexpr int SCREEN_W = 320;
 constexpr int SCREEN_H = 240;
 
-// 70 more pixels of height than the S3, which buys a fourth row.
-constexpr int LIST_ROWS = 4;
+// 70 more pixels of height than the S3, which buys a fourth row and a little
+// more air between them.
+constexpr int LIST_ROWS = BOARD_LIST_ROWS;
+constexpr int ROW_Y0   = 34;
+constexpr int ROW_STEP = 30;
+constexpr int CLOCK_Y  = 176;
 
 constexpr bool HAS_PSRAM = false;
 

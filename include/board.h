@@ -21,6 +21,8 @@
 // free heap after allocating, and boards/cyd.h carries a BAND_H for rendering
 // in horizontal strips if the measurement says it does not.
 
+#include "app_config.h"   // BOARD_LIST_ROWS, so a board and the feeds agree
+
 #if defined(BOARD_CYD)
   #include "boards/cyd.h"
 #else

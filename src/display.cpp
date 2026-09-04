@@ -125,9 +125,9 @@ const lgfx::IFont* const HEAD_FONT  = &fonts::FreeSansBold12pt7b;
 const lgfx::IFont* const ROW_FONT   = &fonts::FreeSans12pt7b;
 const lgfx::IFont* const SMALL_FONT = &fonts::FreeSans9pt7b;
 
-constexpr int ROW_Y0   = 32;   // first row baseline-top, below the header
-constexpr int ROW_STEP = 28;   // vertical pitch between rows
-constexpr int CLOCK_Y  = 120;
+constexpr int ROW_Y0   = board::ROW_Y0;
+constexpr int ROW_STEP = board::ROW_STEP;
+constexpr int CLOCK_Y  = board::CLOCK_Y;
 
 constexpr int TRAIN_DEST_X = 48;   // after the (now smaller) departure time
 constexpr int BUS_ROUTE_X  = 48;   // after the (now smaller) arrival time

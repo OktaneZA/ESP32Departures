@@ -8,8 +8,16 @@
 // How often to poll the API for fresh departures (seconds).
 #define REFRESH_SECONDS       60
 
-// How many departure rows to show on the board (max 3 fit the 170px height).
-#define MAX_DEPARTURES        3
+// How many rows of departures/arrivals a screen holds.
+//
+// Set per board in platformio.ini rather than in board.h, because the API
+// clients cap their results with it and they must not have to pull in the
+// display library to find out how tall the screen is. Three fits the
+// T-Display-S3's 170px; the CYD's 240px takes four.
+#ifndef BOARD_LIST_ROWS
+#define BOARD_LIST_ROWS       3
+#endif
+#define MAX_DEPARTURES        BOARD_LIST_ROWS
 
 // Hide the "On time" status so the destination gets the full row width. Delays,
 // cancellations, and platform numbers are always shown. Set to 0 to always show
@@ -37,8 +45,8 @@
 // exactly as before and never talks to TfL.
 // -----------------------------------------------------------------------------
 
-// How many bus arrivals to show on the bus screen (max 3 fit the 170px height).
-#define MAX_BUS_ARRIVALS      3
+// How many bus arrivals to show (see BOARD_LIST_ROWS).
+#define MAX_BUS_ARRIVALS      BOARD_LIST_ROWS
 
 // How long each screen stays up when a bus stop is configured (seconds).
 #define TRAIN_SCREEN_SECONDS  30
@@ -73,8 +81,8 @@
 // as everything else. Only active when a pier is provisioned.
 // -----------------------------------------------------------------------------
 
-// How many river arrivals to show on the river screen (max 3 fit the 170px height).
-#define MAX_RIVER_ARRIVALS    3
+// How many river arrivals to show (see BOARD_LIST_ROWS).
+#define MAX_RIVER_ARRIVALS    BOARD_LIST_ROWS
 
 // How long the river screen stays up in the rotation (seconds).
 #define RIVER_SCREEN_SECONDS  15

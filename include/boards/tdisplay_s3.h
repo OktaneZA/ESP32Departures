@@ -13,8 +13,15 @@ namespace board {
 constexpr int SCREEN_W = 320;
 constexpr int SCREEN_H = 170;
 
-// Rows that fit the list screens at the current type sizes.
-constexpr int LIST_ROWS = 3;
+// Rows that fit the list screens at the current type sizes. Kept in step with
+// BOARD_LIST_ROWS, which platformio.ini passes to the API clients.
+constexpr int LIST_ROWS = BOARD_LIST_ROWS;
+
+// Where the list rows and the clock sit. The three boards -- trains, buses,
+// boats -- deliberately share this geometry so they read as one instrument.
+constexpr int ROW_Y0   = 32;    // top of the first row, below the header
+constexpr int ROW_STEP = 28;    // vertical pitch between rows
+constexpr int CLOCK_Y  = 120;   // top of the clock strip
 
 // The S3 has PSRAM, so the full-frame back buffer costs no DRAM at all and
 // there is nothing to gain from a palette. Direct colour, as it always was.
