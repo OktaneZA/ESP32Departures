@@ -73,4 +73,10 @@ void renderError(const String& title, const String& detail);
 // Blank the screen (screen-blank hours).
 void renderBlank();
 
+// Where the panel is being touched right now, in screen coordinates.
+// False on a board with no touchscreen, and on one that simply is not
+// being touched. Lives here because the panel object does, and input.cpp
+// has no business reaching into it.
+bool getTouch(int& x, int& y);
+
 }  // namespace ui

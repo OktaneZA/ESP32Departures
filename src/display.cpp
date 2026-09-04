@@ -1,10 +1,17 @@
-// Display + rendering for the LilyGo T-Display-S3 (ST7789, 170x320, 8-bit i80).
+// Display + rendering.
 //
-// Uses LovyanGFX with a full-frame sprite in PSRAM as a back buffer so the
-// scrolling destinations and ticking clock render without flicker.
+// The panel, its pin map and the screen's size all come from board.h, so this
+// file is about layout and nothing else. Two boards are supported and neither
+// is named below deliberately: anything that needs to know which one it is has
+// got the abstraction wrong.
 //
-// Layout is landscape 320x170 (rotation 1) — a wide "platform sign" shape,
-// reimagining the Python app's 256x64 board with room for a big clock.
+// Uses LovyanGFX with a full-frame sprite as a back buffer so the scrolling
+// destinations and ticking clock render without flicker. On the S3 that buffer
+// lives in PSRAM and costs no DRAM; on a board without PSRAM it is a real
+// allocation, which is why ui::begin() reports what it cost.
+//
+// Layout is landscape (rotation 1) — a wide "platform sign" shape, reimagining
+// the Python app's 256x64 board with room for a big clock.
 //
 // Three boards are drawn here — trains, London buses and river boats — and they
 // deliberately share one layout: a header row (mode tag + station/stop/pier
@@ -17,75 +24,50 @@
 #include "dotmatrix_fonts.h"  // baked dot-matrix GFX fonts (needs lgfx types above)
 
 #include "display.h"
+#include "board.h"          // panel, pin map, geometry — see the note there
 #include "app_config.h"
 #include <time.h>
 
-// -----------------------------------------------------------------------------
-// Panel definition — the known-good pin map for the T-Display-S3.
-// (8-bit parallel bus; the 170-wide panel sits at x-offset 35 on the ST7789.)
-// -----------------------------------------------------------------------------
-class LGFX_TDisplayS3 : public lgfx::LGFX_Device {
-    lgfx::Panel_ST7789   _panel;
-    lgfx::Bus_Parallel8  _bus;
-    lgfx::Light_PWM      _light;
-
-public:
-    LGFX_TDisplayS3() {
-        {
-            auto cfg = _bus.config();
-            cfg.freq_write = 20000000;
-            cfg.pin_wr = 8;
-            cfg.pin_rd = 9;
-            cfg.pin_rs = 7;   // D/C
-            cfg.pin_d0 = 39; cfg.pin_d1 = 40; cfg.pin_d2 = 41; cfg.pin_d3 = 42;
-            cfg.pin_d4 = 45; cfg.pin_d5 = 46; cfg.pin_d6 = 47; cfg.pin_d7 = 48;
-            _bus.config(cfg);
-            _panel.setBus(&_bus);
-        }
-        {
-            auto cfg = _panel.config();
-            cfg.pin_cs = 6;
-            cfg.pin_rst = 5;
-            cfg.pin_busy = -1;
-            cfg.panel_width = 170;
-            cfg.panel_height = 320;
-            cfg.offset_x = 35;
-            cfg.offset_y = 0;
-            cfg.readable = false;
-            cfg.invert = true;
-            cfg.rgb_order = false;
-            cfg.dlen_16bit = false;
-            cfg.bus_shared = false;
-            _panel.config(cfg);
-        }
-        {
-            auto cfg = _light.config();
-            cfg.pin_bl = 38;
-            cfg.freq = 44100;
-            cfg.pwm_channel = 7;
-            _light.config(cfg);
-            _panel.setLight(&_light);
-        }
-        setPanel(&_panel);
-    }
-};
-
 namespace {
 
-constexpr int W = 320;
-constexpr int H = 170;
+// The screen, as the layout sees it: landscape, after setRotation(1).
+constexpr int W = board::SCREEN_W;
+constexpr int H = board::SCREEN_H;
 
-// Colours (RGB565). Variables rather than constants so the palette can be set
-// from the provisioned config at boot — the names stay put so the ~30 call
-// sites below read the same as they always did. The defaults are the classic
+// The board's four colours, and what to pass to a draw call to get one.
+//
+// On a direct-colour buffer these variables hold RGB565 values, exactly as they
+// always did. On a board whose buffer is a palette they hold palette *indices*
+// instead, and the real colours live in s_rgb. Either way the ~60 call sites
+// below say BLACK or AMBER and do not care which board they are on — which is
+// the only reason a four-bit buffer was cheap enough to be worth having.
+uint16_t BLACK, AMBER, RED, DIM;
+
+// The actual RGB565 colours, in palette-index order. Defaults are the classic
 // departure-board amber-on-black, used verbatim when nothing was provisioned.
-uint16_t BLACK = 0x0000;
-uint16_t AMBER = 0xFD20;  // classic departure-board amber
-uint16_t RED   = 0xF800;  // cancellations
-uint16_t DIM   = 0x8300;  // dimmed amber for secondary text
+constexpr int PAL_N = 4;
+uint16_t s_rgb[PAL_N] = {
+    0x0000,   // background
+    0xFD20,   // classic departure-board amber
+    0xF800,   // cancellations
+    0x8300,   // dimmed amber for secondary text
+};
 
-LGFX_TDisplayS3 lcd;
+constexpr bool PALETTED = board::COLOR_DEPTH <= 8;
+
+
+board::Display lcd;
 lgfx::LGFX_Sprite spr(&lcd);
+
+// Publish s_rgb to wherever the draw calls will actually read it from.
+void applyPalette() {
+    if (PALETTED) {
+        for (int i = 0; i < PAL_N; ++i) spr.setPaletteColor(i, s_rgb[i]);
+        BLACK = 0; AMBER = 1; RED = 2; DIM = 3;
+    } else {
+        BLACK = s_rgb[0]; AMBER = s_rgb[1]; RED = s_rgb[2]; DIM = s_rgb[3];
+    }
+}
 
 // Per-row horizontal scroll state for destination names that overflow their
 // column. Reset (offset 0) when the row's text changes or when it fits.
@@ -406,18 +388,52 @@ namespace ui {
 
 void begin(uint8_t brightness) {
     s_brightness = brightness;
-    // The T-Display-S3 gates the panel power on GPIO15 — must be HIGH.
-    pinMode(15, OUTPUT);
-    digitalWrite(15, HIGH);
+    // Some boards gate the panel's power rail behind a pin that must be driven
+    // HIGH before init(), or the display stays dark with no other symptom.
+    if (board::PIN_PANEL_POWER >= 0) {
+        pinMode(board::PIN_PANEL_POWER, OUTPUT);
+        digitalWrite(board::PIN_PANEL_POWER, HIGH);
+    }
 
     lcd.init();
-    lcd.setRotation(1);          // landscape 320x170
+    lcd.setRotation(1);          // landscape
     lcd.setBrightness(brightness);
 
-    spr.setPsram(true);          // back buffer in PSRAM (~106 KB)
-    spr.setColorDepth(16);
-    spr.createSprite(W, H);
+    // Without PSRAM this is a real DRAM allocation competing with WiFi and TLS,
+    // so report what it cost rather than assuming it was free. A board that is
+    // going to run out of heap does it during a TLS handshake, hours later and
+    // far from here, which is a miserable thing to debug backwards.
+    const uint32_t heapBefore = ESP.getFreeHeap();
+    const uint32_t bufBytes = (uint32_t)W * H * board::COLOR_DEPTH / 8;
+    spr.setPsram(board::HAS_PSRAM);
+    spr.setColorDepth(board::COLOR_DEPTH);
+    if (!spr.createSprite(W, H)) {
+        // Worth reporting the largest *contiguous* block, not just the total:
+        // this allocation failed once with 285 KB free, because the heap had
+        // the total and no single block big enough.
+        Serial.printf("[display] FAILED to allocate a %dx%d %d-bit back buffer "
+                      "(%u bytes); free heap %u, largest block %u\n",
+                      W, H, board::COLOR_DEPTH, (unsigned)bufBytes,
+                      (unsigned)heapBefore,
+                      (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    }
+    applyPalette();
     spr.setTextWrap(false);
+    Serial.printf("[display] %s %dx%d, %d-bit buffer %u bytes in %s, "
+                  "free heap %u -> %u (largest block %u)\n",
+                  board::NAME, W, H, board::COLOR_DEPTH, (unsigned)bufBytes,
+                  board::HAS_PSRAM ? "PSRAM" : "DRAM",
+                  (unsigned)heapBefore, (unsigned)ESP.getFreeHeap(),
+                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+}
+
+bool getTouch(int& x, int& y) {
+    if (!board::HAS_TOUCH) return false;
+    int32_t tx = 0, ty = 0;
+    if (!lcd.getTouch(&tx, &ty)) return false;
+    x = tx;
+    y = ty;
+    return true;
 }
 
 void setBrightness(uint8_t brightness) {
@@ -433,10 +449,13 @@ void setTheme(int fg, int dim, int warn, int bg) {
     auto apply = [](uint16_t& target, int value) {
         if (value >= 0 && value <= 0xFFFF) target = (uint16_t)value;
     };
-    apply(AMBER, fg);
-    apply(DIM, dim);
-    apply(RED, warn);
-    apply(BLACK, bg);
+    // Written into s_rgb rather than into BLACK/AMBER/... because on a
+    // paletted board those hold indices, and an index is not a colour.
+    apply(s_rgb[1], fg);
+    apply(s_rgb[3], dim);
+    apply(s_rgb[2], warn);
+    apply(s_rgb[0], bg);
+    applyPalette();
 }
 
 void renderSetup() {

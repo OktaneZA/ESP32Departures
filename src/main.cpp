@@ -20,8 +20,10 @@
 
 #include "app_config.h"
 #include "config.h"
+#include "board.h"
 #include "model.h"
 #include "display.h"
+#include "input.h"
 #include "rail_api.h"
 #include "bus_api.h"
 #include "river_api.h"
@@ -333,46 +335,13 @@ static bool isBlankHour() {
     return h >= c.blank_start || h < c.blank_end;   // wraps past midnight
 }
 // ---------------------------------------------------------------------------
-// The two front buttons
-//
-// Both are active-low. BUTTON_1 is the BOOT pin, which has an external pull-up
-// and is only special while the chip is resetting; at runtime it is an ordinary
-// input. BUTTON_2 needs the internal pull-up enabling.
-//
-// Named for what they do rather than where they sit: in this rotation GPIO0 is
-// the lower of the two and GPIO14 the upper, which is the opposite of what the
-// pin numbering suggests.
-// ---------------------------------------------------------------------------
-constexpr uint8_t PIN_BTN_CLOCK = BUTTON_1;   // GPIO0  - hold the clock on screen
-constexpr uint8_t PIN_BTN_NEXT  = BUTTON_2;   // GPIO14 - step to the next panel
-
-constexpr uint32_t BTN_DEBOUNCE_MS = 40;
-
-// Returns true once per press, on the release-to-press edge. Debounced by
-// requiring the level to have been stable for BTN_DEBOUNCE_MS: these are bare
-// tactile switches, and without it a single push registers several times.
-static bool pressed(uint8_t pin, bool& lastStable, uint32_t& changedAt) {
-    bool down = (digitalRead(pin) == LOW);
-    if (down != lastStable) {
-        if (millis() - changedAt >= BTN_DEBOUNCE_MS) {
-            lastStable = down;
-            changedAt = millis();
-            return down;            // edge, and it settled: a real press
-        }
-    } else {
-        changedAt = millis();
-    }
-    return false;
-}
-
-
 // ---------------------------------------------------------------------------
 // Setup / loop
 // ---------------------------------------------------------------------------
 void setup() {
     Serial.begin(115200);
     delay(200);
-    Serial.println("\n[boot] Departure Buddy - T-Display-S3");
+    Serial.printf("\n[boot] Departure Buddy - %s\n", board::NAME);
 
     cfg::load();
     const Config& c = cfg::get();
@@ -385,11 +354,11 @@ void setup() {
     Serial.printf("[boot] weather at %d,%d (%s)\n",
                   c.wx_lat, c.wx_lon, c.wx_name.c_str());
 
-    pinMode(PIN_BTN_CLOCK, INPUT_PULLUP);
-    pinMode(PIN_BTN_NEXT, INPUT_PULLUP);
-
     g_mutex = xSemaphoreCreateMutex();
     ui::begin(c.brightness);
+    // After ui::begin(): on a touch board the controller comes up with the
+    // panel, so there is nothing to configure until the panel exists.
+    input::begin();
     // Before the first frame, so even the "Awaiting setup" screen is themed.
     ui::setTheme(c.col_fg, c.col_dim, c.col_warn, c.col_bg);
 
@@ -527,13 +496,12 @@ void loop() {
     // Buttons: the top one holds the clock on screen, the bottom one steps to
     // the next panel. Read every frame so a press is never missed between the
     // long dwells.
-    static bool clockDown = false, nextDown = false;
-    static uint32_t clockAt = 0, nextAt = 0;
     static bool clockHold = false;
     bool stepScreen = false;
 
-    bool clockPress = pressed(PIN_BTN_CLOCK, clockDown, clockAt);
-    bool nextPress = pressed(PIN_BTN_NEXT, nextDown, nextAt);
+    const input::Press press = input::poll();
+    const bool clockPress = press.clock;
+    const bool nextPress = press.next;
 
     if (clockPress) {
         clockHold = !clockHold;
