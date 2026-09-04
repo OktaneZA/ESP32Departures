@@ -35,11 +35,20 @@ constexpr char kOperation[] = "GetDepBoardWithDetails";  // has calling points
 
 // Route large JSON documents into PSRAM so a full WithDetails board (calling
 // points for every service) never pressures the ~200 KB internal heap.
-struct SpiRamAllocator : ArduinoJson::Allocator {
-    void* allocate(size_t n) override { return heap_caps_malloc(n, MALLOC_CAP_SPIRAM); }
-    void  deallocate(void* p) override { heap_caps_free(p); }
+// The departure document is the largest thing this firmware parses, so on a
+// board with PSRAM it is kept out of DRAM entirely. On a board without any,
+// MALLOC_CAP_SPIRAM allocations simply fail -- every parse returned NoMemory
+// and the train screen never worked at all -- so fall back to the ordinary
+// heap rather than insisting on memory the board does not have.
+struct DocAllocator : ArduinoJson::Allocator {
+    void* allocate(size_t n) override {
+        void* p = heap_caps_malloc(n, MALLOC_CAP_SPIRAM);
+        return p ? p : heap_caps_malloc(n, MALLOC_CAP_8BIT);
+    }
+    void deallocate(void* p) override { heap_caps_free(p); }
     void* reallocate(void* p, size_t n) override {
-        return heap_caps_realloc(p, n, MALLOC_CAP_SPIRAM);
+        void* q = heap_caps_realloc(p, n, MALLOC_CAP_SPIRAM);
+        return q ? q : heap_caps_realloc(p, n, MALLOC_CAP_8BIT);
     }
 };
 
@@ -149,9 +158,14 @@ Fetch fetchDepartures(const Config& cfg, std::vector<Departure>& out,
     fsvc["operator"] = true;
     fsvc["isCancelled"] = true;
     fsvc["destination"] = true;
-    fsvc["subsequentCallingPoints"] = true;
+    // The calling-point subtree is every intermediate station of every service,
+    // and it dwarfs the rest of the response. The layout does not draw it --
+    // see the (void)callingAt in renderBoard -- so on a board with no PSRAM to
+    // waste it is not parsed at all. That is the difference between the train
+    // screen working and the document failing to allocate.
+    if (psramFound()) fsvc["subsequentCallingPoints"] = true;
 
-    SpiRamAllocator allocator;
+    DocAllocator allocator;
     JsonDocument doc(&allocator);
     DeserializationError err;
 
@@ -163,7 +177,19 @@ Fetch fetchDepartures(const Config& cfg, std::vector<Departure>& out,
     Serial.println("[rail] ----------------------");
     err = deserializeJson(doc, body, DeserializationOption::Filter(filter));
 #else
-    err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+    if (psramFound()) {
+        err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+    } else {
+        // Parsing straight off the TLS socket treats a gap between records as
+        // end-of-input: on the ESP32 that gave IncompleteInput on most polls
+        // and EmptyInput on the rest, succeeding perhaps one time in six, while
+        // the same code is reliable on the faster S3. Reading the body first
+        // costs a buffer and removes the race entirely.
+        String body = http.getString();
+        Serial.printf("[rail] body %u bytes, free heap %u\n",
+                      (unsigned)body.length(), (unsigned)ESP.getFreeHeap());
+        err = deserializeJson(doc, body, DeserializationOption::Filter(filter));
+    }
 #endif
     http.end();
     if (err) {

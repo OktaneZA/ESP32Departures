@@ -59,6 +59,38 @@ constexpr bool PALETTED = board::COLOR_DEPTH <= 8;
 board::Display lcd;
 lgfx::LGFX_Sprite spr(&lcd);
 
+// A thick line, with or without anti-aliasing depending on what the buffer can
+// take.
+//
+// LovyanGFX's drawWideLine() is anti-aliased, and anti-aliasing means alpha
+// blending, which means reading the buffer back to blend against. That read
+// path dereferences a null palette on a paletted sprite and panics the board:
+//
+//   draw_wedgeline -> fillRectAlpha -> readRect -> copy_palette_affine
+//   Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
+//
+// So on a paletted board the same shape is built from two triangles instead:
+// hard-edged, which is what a four-colour board wants anyway, since blended
+// pixels have no palette entry to land in.
+void wideLine(float x0, float y0, float x1, float y1, float w, uint16_t colour) {
+    if (!PALETTED) {
+        spr.drawWideLine(x0, y0, x1, y1, w, colour);
+        return;
+    }
+    const float dx = x1 - x0, dy = y1 - y0;
+    const float len = sqrtf(dx * dx + dy * dy);
+    if (len < 0.01f) return;
+    // Half-width perpendicular to the line, giving the quad's four corners.
+    const float nx = -dy / len * (w * 0.5f);
+    const float ny =  dx / len * (w * 0.5f);
+    const int ax = lroundf(x0 + nx), ay = lroundf(y0 + ny);
+    const int bx = lroundf(x0 - nx), by = lroundf(y0 - ny);
+    const int cx = lroundf(x1 - nx), cy = lroundf(y1 - ny);
+    const int dx2 = lroundf(x1 + nx), dy2 = lroundf(y1 + ny);
+    spr.fillTriangle(ax, ay, bx, by, cx, cy, colour);
+    spr.fillTriangle(ax, ay, cx, cy, dx2, dy2, colour);
+}
+
 // Publish s_rgb to wherever the draw calls will actually read it from.
 void applyPalette() {
     if (PALETTED) {
@@ -265,7 +297,7 @@ void drawSun(int cx, int cy, int r) {
         float a = i * (float)M_PI / 4.0f;
         int x0 = cx + (int)(cosf(a) * r * 1.45f), y0 = cy + (int)(sinf(a) * r * 1.45f);
         int x1 = cx + (int)(cosf(a) * r * 2.05f), y1 = cy + (int)(sinf(a) * r * 2.05f);
-        spr.drawWideLine(x0, y0, x1, y1, r * 0.30f, AMBER);
+        wideLine(x0, y0, x1, y1, r * 0.30f, AMBER);
     }
 }
 
@@ -282,7 +314,7 @@ void drawDrops(int cx, int cy, int w, bool slanted) {
     for (int i = -1; i <= 1; ++i) {
         int x = cx + i * w * 26 / 100;
         int dx = slanted ? w * 10 / 100 : 0;
-        spr.drawWideLine(x + dx, cy, x - dx, cy + w * 30 / 100, w * 0.055f, AMBER);
+        wideLine(x + dx, cy, x - dx, cy + w * 30 / 100, w * 0.055f, AMBER);
     }
 }
 
