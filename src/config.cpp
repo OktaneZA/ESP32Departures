@@ -17,6 +17,7 @@
 
 #include "config.h"
 #include "app_config.h"   // compile-time defaults
+#include "board.h"        // which board this firmware is for
 #include <Preferences.h>
 #include <WiFi.h>
 
@@ -211,6 +212,7 @@ void handle_line(String line) {
     } else if (line == "SCAN") {
         scan_networks();
     } else if (line == "HASH") {
+        Serial.print("board="); Serial.println(board::ID);
         // Lets a user prove the board is running the firmware that was
         // published, rather than taking it on trust. getSketchMD5() hashes
         // exactly the image the flasher wrote -- getSketchSize() returns the
@@ -265,6 +267,11 @@ void handle_line(String line) {
         Serial.print("wlon=");   Serial.println(g_cfg.wx_lon);
         Serial.print("wname=");  Serial.println(g_cfg.wx_name);
         Serial.print("nmode=");  Serial.println(g_cfg.night_mode);
+        // Which board this is, so a configurator can pick the right firmware
+        // without guessing from a USB vendor id -- that identifies the bridge
+        // chip, not the board behind it.
+        Serial.print("board=");  Serial.println(board::ID);
+        Serial.print("chip=");   Serial.println(board::CHIP);
         Serial.print("md5=");    Serial.println(ESP.getSketchMD5());
         Serial.print("size=");   Serial.println(ESP.getSketchSize());
         Serial.print("wifi=");   Serial.println(WiFi.status() == WL_CONNECTED ? "up" : "down");

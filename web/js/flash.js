@@ -3,21 +3,23 @@
 // This is the same library and the same flash layout the .exe uses, so a board
 // flashed here is byte-identical to one flashed with the installer:
 //
-//   0x0000  bootloader.bin
-//   0x8000  partitions.bin
-//   0xE000  boot_app0.bin
-//   0x10000 firmware.bin
+//   0x0000 / 0x1000  bootloader.bin   (S3 / classic ESP32 — they differ)
+//   0x8000           partitions.bin
+//   0xE000           boot_app0.bin
+//   0x10000          firmware.bin
+//
+// Which offsets, which chip and how big its flash is all come from the
+// manifest's entry for the chosen board, never from constants here: writing one
+// board's images at another's offsets leaves it unbootable.
 //
 // Settings live in a separate NVS partition that writing the app does not
 // touch, so flashing preserves an existing board's configuration (INST-12).
 
 import { ESPLoader, Transport } from '../vendor/esptool.js';
 
-// Matches installer.py's flash(): --flash_mode dio --flash_freq 80m
-// --flash_size 16MB on an esp32s3 at 921600 baud.
+// Matches installer.py's flash(): --flash_mode dio --flash_freq 80m.
 const FLASH_MODE = 'dio';
 const FLASH_FREQ = '80m';
-const FLASH_SIZE = '16MB';
 const BAUD = 921600;
 
 // Load the manifest describing which binaries to write and where.
@@ -25,6 +27,32 @@ export async function loadManifest() {
   const r = await fetch('firmware/manifest.json', { cache: 'no-cache' });
   if (!r.ok) throw new Error('No firmware manifest published (HTTP ' + r.status + ')');
   return r.json();
+}
+
+// Every board the site publishes firmware for.
+//
+// A manifest from before there were two boards has `parts` and `chip` at the
+// top level instead. It is presented as a single board so an older published
+// site keeps working rather than showing an empty picker.
+export function boards(manifest) {
+  if (Array.isArray(manifest?.boards)) return manifest.boards;
+  if (Array.isArray(manifest?.parts)) {
+    return [{
+      id: 'tdisplay-s3',
+      name: 'LilyGo T-Display-S3',
+      chip: manifest.chip,
+      flash_size: '16MB',
+      parts: manifest.parts,
+    }];
+  }
+  return [];
+}
+
+// The entry for one board id, or null. Falls back to the only board when there
+// is just one, so a single-board site never needs the caller to choose.
+export function boardById(manifest, id) {
+  const all = boards(manifest);
+  return all.find((b) => b.id === id) || (all.length === 1 ? all[0] : null);
 }
 
 async function sha256Hex(buf) {
@@ -46,9 +74,9 @@ function toBinaryString(buf) {
 // Fetch every image and verify it against the manifest before writing a single
 // byte. A truncated download that bricked the board would be far worse than a
 // refusal, and the check is cheap.
-export async function fetchImages(manifest, onProgress) {
+export async function fetchImages(board, onProgress) {
   const parts = [];
-  for (const part of manifest.parts) {
+  for (const part of board.parts) {
     onProgress?.(`Downloading ${part.path.split('/').pop()}…`);
     const r = await fetch(part.path, { cache: 'no-cache' });
     if (!r.ok) throw new Error(`Could not download ${part.path} (HTTP ${r.status})`);
@@ -84,7 +112,7 @@ function chipFamily(name) {
 // `onStatus(text)` for prose, `onProgress(fraction)` for the 0..1 bar.
 // `expectChip` is the manifest's chip family; writing is refused if the board
 // on the other end is not that.
-export async function flash(port, parts, onStatus, onProgress, expectChip) {
+export async function flash(port, parts, onStatus, onProgress, expectChip, flashSize) {
   const transport = new Transport(port, true);
   // esptool-js expects a terminal-ish sink; route it to the status callback so
   // the user sees the real chip detection and erase messages.
@@ -128,7 +156,7 @@ export async function flash(port, parts, onStatus, onProgress, expectChip) {
 
     await loader.writeFlash({
       fileArray: parts,
-      flashSize: FLASH_SIZE,
+      flashSize: flashSize || 'keep',
       flashMode: FLASH_MODE,
       flashFreq: FLASH_FREQ,
       eraseAll: false,

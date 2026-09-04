@@ -61,7 +61,9 @@ constexpr int PIN_BTN_NEXT  = -1;
 // Nothing gates the panel's power rail on this board.
 constexpr int PIN_PANEL_POWER = -1;
 
+constexpr const char* ID   = "cyd";
 constexpr const char* NAME = "ESP32 Cheap Yellow Display";
+constexpr const char* CHIP = "esp32";
 
 class Display : public lgfx::LGFX_Device {
 #ifdef CYD_PANEL_ILI9341

@@ -106,6 +106,9 @@ export function defaultConfig() {
     // TfL's keyless feed is; a metered provider replaces this with its allowance
     // and the board paces itself to fit.
     busbudget: 0,
+    // Which board the firmware is flashed for. Not sent to the device -- it
+    // knows what it is -- only used to pick the right images to write.
+    board: 'tdisplay-s3',
     services: ['train'],
     onHour: 6, offHour: 22,      // converted to bstart/bend on the way out
     bright: 180, refr: 60,

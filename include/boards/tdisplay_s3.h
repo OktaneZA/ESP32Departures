@@ -39,7 +39,13 @@ constexpr int PIN_BTN_NEXT  = 14;   // BUTTON_2 — step to the next panel
 // before init(), or the display stays dark with no other symptom.
 constexpr int PIN_PANEL_POWER = 15;
 
+// Short, stable identifier. It names the board's firmware directory on the
+// site and is what GET reports, so the configurator can tell which images a
+// board wants without the user having to know. Never change it: an older
+// published site would stop recognising boards already in the field.
+constexpr const char* ID   = "tdisplay-s3";
 constexpr const char* NAME = "LilyGo T-Display-S3";
+constexpr const char* CHIP = "esp32s3";
 
 // Pin map is the known-good one for this board. The 170-wide panel sits at
 // x-offset 35 on the ST7789's 240-wide controller memory.

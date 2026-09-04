@@ -579,6 +579,45 @@ function showProblems() {
 }
 
 // ─────────────────────────────── install ─────────────────────────────────
+
+// Which board the user says they have. Only the flashing step needs it: the
+// settings protocol is identical on both, which is why step 2 has always
+// worked on either without knowing.
+let boardList = [];
+
+async function initBoards() {
+  const sel = $('boardPick');
+  try {
+    boardList = flasher.boards(await flasher.loadManifest());
+  } catch {
+    boardList = [];                    // no firmware published; step 2 still works
+  }
+  if (boardList.length < 2) {
+    // One board, or none: a picker with a single entry is just noise.
+    $('boardField').hidden = true;
+    if (boardList.length === 1) ui.board = boardList[0].id;
+    return;
+  }
+  sel.innerHTML = '';
+  for (const b of boardList) sel.append(new Option(b.name, b.id));
+  sel.value = ui.board && boardList.some((b) => b.id === ui.board)
+    ? ui.board : boardList[0].id;
+  ui.board = sel.value;
+  sel.onchange = () => { ui.board = sel.value; describeBoard(); };
+  describeBoard();
+}
+
+function describeBoard() {
+  const b = boardList.find((x) => x.id === ui.board);
+  if (!b) return;
+  $('boardHint').textContent = b.note
+    + (b.hold_boot
+      ? ' \u2014 this board cannot put itself into programming mode, so hold its '
+        + 'BOOT button while you press Flash and keep holding until the log says '
+        + 'it detected the chip.'
+      : '');
+}
+
 function initInstall() {
   const supported = isSupported();
   $('webserial').hidden = !supported;
@@ -744,13 +783,18 @@ async function verifyFirmware(board) {
   } catch {
     return;                       // nothing published here to compare against
   }
-  const want = manifest.parts?.find((p) => p.path.endsWith('firmware.bin'))?.md5;
-  if (!want) return;              // an older manifest, before md5 was published
-
   const got = await board.readHash();
   if (!got) {
     logLine('This board is running firmware too old to report its checksum.');
     return;
+  }
+  // Compare against what the *device* says it is rather than what was picked in
+  // the dropdown: the two can disagree, and the device is the authority.
+  const entry = flasher.boardById(manifest, got.board || ui.board);
+  const want = entry?.parts?.find((p) => p.path.endsWith('firmware.bin'))?.md5;
+  if (!want) return;              // an older manifest, before md5 was published
+  if (got.board && got.board !== ui.board && boardList.length > 1) {
+    logLine(`This is a ${entry?.name || got.board}, not the board selected above.`);
   }
   if (got.md5.toLowerCase() === want.toLowerCase()) {
     logLine(`Verified: running the published firmware (${manifest.version}).`, 'ok');
@@ -777,11 +821,21 @@ async function flashFirmware(port) {
       + 'change settings.');
     return false;
   }
-  logLine(`Firmware available: ${manifest.name} ${manifest.version}.`);
+  const board = flasher.boardById(manifest, ui.board);
+  if (!board) {
+    logLine('Pick which board you have before flashing.', 'bad');
+    return false;
+  }
+  logLine(`Firmware available: ${manifest.name} ${manifest.version} `
+    + `for ${board.name}.`);
+  if (board.hold_boot) {
+    logLine('Hold the BOOT button now, and keep holding until the log says it '
+      + 'detected the chip.');
+  }
   logLine('Flashing takes about a minute. Do not unplug the board.');
 
   try {
-    const parts = await flasher.fetchImages(manifest, (m) => logLine('  ' + m));
+    const parts = await flasher.fetchImages(board, (m) => logLine('  ' + m));
     logLine('All images verified against their checksums.', 'ok');
     let lastPct = -1;
     await flasher.flash(port, parts,
@@ -792,7 +846,7 @@ async function flashFirmware(port) {
       },
       // What these images are for. The flasher compares it against the chip it
       // detects and refuses rather than bricking a board with the wrong build.
-      manifest.chip);
+      board.chip, board.flash_size);
     logLine('Firmware written.', 'ok');
     return true;
   } catch (e) {
@@ -839,5 +893,9 @@ initTrains();
 initBuses();
 initThemes();
 initInstall();
+// Populates the board picker from the published manifest. Async and deliberately
+// not awaited: the whole page works without firmware published, and step 2 does
+// not care which board it is talking to.
+initBoards();
 render();
 setInterval(() => { if (!document.hidden) render(); }, 1000);
