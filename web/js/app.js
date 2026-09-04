@@ -817,8 +817,8 @@ async function flashFirmware(port) {
     manifest = await flasher.loadManifest();
   } catch (e) {
     logLine('No firmware is published here to flash: ' + e.message, 'bad');
-    logLine('Use the installer for a brand-new board, then come back here to '
-      + 'change settings.');
+    logLine('Nothing to flash from here yet. The repository has the source and '
+      + 'a command-line installer if you need one.');
     return false;
   }
   const board = flasher.boardById(manifest, ui.board);

@@ -4,7 +4,7 @@
 
 A static page that configures a board: pick your station, stop and pier, choose
 colours and timings, preview the result, then send it to the device over USB
-from the browser — or download a settings file for the Windows installer.
+from the browser — or download a settings file for the command-line installer.
 
 There is **no backend**. Every API it needs is CORS-open, so the whole thing is
 plain static files.
@@ -29,7 +29,8 @@ Two things to know:
 
 Firefox and Safari have no Web Serial, so they get the downloadable settings
 file instead, to be dropped onto the
-[Windows installer](https://github.com/OktaneZA/ESP32Departures/releases/latest). The page detects this and says so.
+command-line tools in the repository. The page detects this and says so, rather
+than offering a download that would not help.
 
 ## Deploy to Azure Static Web Apps
 
@@ -92,7 +93,7 @@ being handed `index.html` and failing to parse it as JSON.
 
 | Path | What it is |
 |---|---|
-| `index.html` | the form, preview and installer UI |
+| `index.html` | the form, preview and the flash/configure UI |
 | `js/config.js` | config model, the `mode` set, RGB565 colour maths |
 | `js/api.js` | TfL / postcode / rail lookups — ports of `installer.py` |
 | `js/serial.js` | provisioning over Web Serial (`PING`/`CFG`/`COMMIT`) |

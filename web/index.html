@@ -275,23 +275,24 @@
 
   <div id="nowebserial" class="install-option" hidden>
     <h3>Your browser can’t talk to USB devices</h3>
-    <p class="hint">Flashing and configuring over USB needs Chrome, Edge or Opera on
-       a desktop. In Firefox and Safari, download the settings file below and drop it
-       onto the <a href="https://github.com/OktaneZA/ESP32Departures/releases/latest" target="_blank" rel="noopener">Windows installer</a>,
-       which does both steps for you.</p>
+    <p class="hint">Setting a board up from here needs <strong>Chrome, Edge or
+       Opera on a desktop</strong>. Firefox and Safari have no Web Serial support
+       at all, so there is nothing this page can do from them — switching browser
+       is the quickest fix. If you would rather not, the
+       <a href="https://github.com/OktaneZA/ESP32Departures#departure-buddy" target="_blank" rel="noopener">command-line tools in the
+       repository</a> do the same job from a terminal.</p>
   </div>
 
   <div class="install-option">
-    <h3>Other things you can do</h3>
-    <p class="hint">Save your settings as a file, then drag it onto
-       <a href="https://github.com/OktaneZA/ESP32Departures/releases/latest" target="_blank" rel="noopener"><code>DepartureBuddyInstaller.exe</code></a>.
-       It flashes the board and applies them — the desktop equivalent of both
-       steps above.</p>
+    <h3>Doing it another way</h3>
+    <p class="hint">This page is static and the firmware is open, so nothing here
+       is the only route. Build it yourself, script it, or change what it shows —
+       <a href="https://github.com/OktaneZA/ESP32Departures" target="_blank" rel="noopener">it is all in the repository</a>,
+       along with a command-line installer that takes the settings file below.</p>
     <button type="button" id="btnDownload">Download settings file</button>
     <p class="hint secrets-warning">Heads up: this file contains your WiFi password in
-       plain text, so it can set the board up without you retyping anything. Keep it
-       somewhere sensible and delete it when you’re done — the installer offers to do
-       that for you.</p>
+       plain text, so a tool can set the board up without you retyping anything. Keep
+       it somewhere sensible and delete it when you’re done.</p>
   </div>
 </section>
 
