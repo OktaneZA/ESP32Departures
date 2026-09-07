@@ -43,13 +43,22 @@ jobs:
           pip install --upgrade platformio
           pio run
 
+      # Into the per-board directory the binaries live in and the exe reads
+      # from. boot_app0.bin is not staged: it comes from the Arduino framework
+      # rather than from this source, so the committed copy is the right one.
       - name: Stage the freshly built firmware
         shell: bash
         run: |
-          cp .pio/build/lilygo-t-display-s3/firmware.bin installer/firmware/firmware.bin
-          cp .pio/build/lilygo-t-display-s3/bootloader.bin installer/firmware/bootloader.bin
-          cp .pio/build/lilygo-t-display-s3/partitions.bin installer/firmware/partitions.bin
-          ls -l installer/firmware/
+          dest=installer/firmware/tdisplay-s3
+          cp .pio/build/lilygo-t-display-s3/firmware.bin   "$dest/firmware.bin"
+          cp .pio/build/lilygo-t-display-s3/bootloader.bin "$dest/bootloader.bin"
+          cp .pio/build/lilygo-t-display-s3/partitions.bin "$dest/partitions.bin"
+          # Every file the exe will try to flash must exist, or it fails at the
+          # point of writing to somebody's board rather than here.
+          for f in bootloader.bin partitions.bin boot_app0.bin firmware.bin; do
+            test -s "$dest/$f" || { echo "missing $dest/$f"; exit 1; }
+          done
+          ls -l "$dest"
 
       # --- installer -----------------------------------------------------
       - name: Build the exe

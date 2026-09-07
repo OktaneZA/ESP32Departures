@@ -54,8 +54,19 @@ def resource_path(rel):
     return os.path.join(base, rel)
 
 
+# The board this exe flashes. It is not a setting: flash() hard-codes the S3's
+# chip and flash size too, which is why the README calls the exe T-Display-S3
+# only and points everyone else at the web page.
+FIRMWARE_BOARD = "tdisplay-s3"
+
+
 def fw(name):
-    return resource_path(os.path.join("firmware", name))
+    """Path to one bundled firmware binary.
+
+    The binaries moved into per-board directories when the web page started
+    publishing both boards; this reads them where they now live rather than at
+    the flat path they used to have, which no longer exists."""
+    return resource_path(os.path.join("firmware", FIRMWARE_BOARD, name))
 
 
 def detect_tz():
@@ -1713,6 +1724,19 @@ def run_auto(path):
 
 
 def main():
+    # A few messages carry a tick or an ellipsis, and Python encodes console
+    # output with the locale's codec — cp1252 when the output is redirected to a
+    # file or a pipe, which cannot represent either. Printing one then raised
+    # UnicodeEncodeError *after* the flash had already succeeded, so a board that
+    # was updated perfectly well reported a traceback instead. Degrade to "?"
+    # rather than crash; the encoding itself is left alone so a console that can
+    # show the character still does.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except Exception:
+            pass          # very old Python, or a stream that is not a TextIO
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--auto", help="non-interactive: JSON config file")
     args = ap.parse_args()
