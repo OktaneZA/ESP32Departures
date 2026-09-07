@@ -9,14 +9,16 @@ Colours are derived from the firmware's own RGB565 constants rather than
 eyeballed, and any theme can be rendered by passing a different palette — the
 board's colours are runtime settings now, so the mockups can show them.
 
-Bus and river share one renderer here because they share one on the device:
-drawArrivalsBoard() draws both, differing only in tag and empty-state text.
+Bus, river and Tube share one renderer here because they share one on the
+device: drawArrivalsBoard() draws all three, differing only in tag and
+empty-state text.
 
 Run with no arguments to regenerate everything:
 
   mockup-train.png        train board
   mockup-bus.png          London bus arrivals
   mockup-river.png        river boat sailings
+  mockup-tube.png         London Underground arrivals
   mockup-clock.png        the full-screen clock
   mockup-weather.png      current conditions
   mockup-scroll-demo.png  train board, delayed + cancelled
@@ -324,6 +326,14 @@ def render_river(pier, line_filter, sailings, out_name, pal=CLASSIC):
                     pier, sailings, "No boats due", out_name, pal)
 
 
+def render_tube(station, line_name, trains, out_name, pal=CLASSIC):
+    """The Tube board. Same renderer again, with one substitution: the line is
+    named once in the tag, so each row's route column carries the direction
+    ("N/B", or "P2" where TfL gives only a platform number) instead."""
+    render_arrivals(f"TUBE {line_name}".upper() if line_name else "TUBE",
+                    station, trains, "No trains due", out_name, pal)
+
+
 if __name__ == "__main__":
     print("Rendering board mockups...")
 
@@ -344,6 +354,12 @@ if __name__ == "__main__":
         {"when": at(23), "line": "RB6", "dest": "Putney Pier",       "eta": eta(23)},
         {"when": at(41), "line": "RB1", "dest": "Barking Riverside", "eta": eta(41)},
     ], "mockup-river.png")
+
+    render_tube("King's Cross St. Pancras", "Victoria", [
+        {"when": at(1),  "line": "N/B", "dest": "Walthamstow Central", "eta": eta(1)},
+        {"when": at(4),  "line": "N/B", "dest": "Seven Sisters",       "eta": eta(4)},
+        {"when": at(7),  "line": "N/B", "dest": "Walthamstow Central", "eta": eta(7)},
+    ], "mockup-tube.png")
 
     render_clock("mockup-clock.png")
 

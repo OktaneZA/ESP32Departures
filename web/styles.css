@@ -195,7 +195,10 @@ input[type=color] {
   overflow: hidden;
 }
 .b-head { display: flex; align-items: baseline; gap: 2.5%; }
-.b-tag { font-size: 4.2cqw; letter-spacing: 0.06em; }
+/* The tag never wraps and never shrinks: drawHeader() measures it first and
+   gives the name whatever is left, so a long one ("TUBE VICTORIA") squeezes
+   the name rather than folding onto a second line the board does not have. */
+.b-tag { font-size: 4.2cqw; letter-spacing: 0.06em; white-space: nowrap; flex-shrink: 0; }
 .b-name { font-size: 6.4cqw; font-weight: 700; white-space: nowrap; overflow: hidden; }
 .b-rows { margin-top: 2.4%; display: grid; gap: 1.1%; }
 .b-row { display: flex; align-items: baseline; gap: 2.5%; font-size: 5.4cqw; white-space: nowrap; }

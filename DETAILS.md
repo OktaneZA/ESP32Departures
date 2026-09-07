@@ -11,9 +11,9 @@ For the formal specification — every requirement, with IDs — see
 ## What it does
 
 - Live departures for a station (optionally filtered to a destination or platform)
-- **Trains, buses, boats — any combination** — you choose at setup. The board
-  cycles through whatever is enabled (trains 30s, buses 15s, boats 15s); with a
-  single service it stays on that screen
+- **Trains, buses, Tube, boats — any combination** — you choose at setup. The
+  board cycles through whatever is enabled (trains 30s, buses 15s, Tube 15s,
+  boats 15s); with a single service it stays on that screen
 - **London bus arrivals** for one stop from TfL's open Countdown feed — expected
   time, route number, destination, and a "Due" / "N min" countdown that ticks
   between polls

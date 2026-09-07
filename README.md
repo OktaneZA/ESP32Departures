@@ -2,7 +2,7 @@
 
 # Departure Buddy
 
-### A real departure board for your desk — trains, buses and river boats, live.<br>About £15 of hardware. Ten minutes. No code.
+### A real departure board for your desk — trains, buses, Tube and river boats, live.<br>About £15 of hardware. Ten minutes. No code.
 
 [![Latest firmware](https://img.shields.io/github/v/release/OktaneZA/ESP32Departures?style=for-the-badge&label=firmware&color=2ea44f)](https://github.com/OktaneZA/ESP32Departures/releases/latest)
 [![License](https://img.shields.io/github/license/OktaneZA/ESP32Departures?style=for-the-badge&color=0969da)](LICENSE)
@@ -31,8 +31,9 @@ your front door, or in your kitchen, showing **your** stop.
 
 Shop-bought desktop departure boards
 [start around £165](https://ukdepartureboards.co.uk/store/). This one is a £15
-board and a USB cable, and it does more: trains, London buses, Thames river
-boats, weather and a clock, cycling through whichever you care about.
+board and a USB cable, and it does more: trains, London buses, the Underground,
+Thames river boats, weather and a clock, cycling through whichever you care
+about.
 
 Everything happens in a web page. **You don't write a line of code, edit a
 config file, solder anything, or install a toolchain.** Plug the board into your
@@ -45,13 +46,15 @@ times and it never needs your computer again.
 
 <table>
 <tr>
-<td width="33%"><img src="docs/Train.jpg" alt="Train departures"></td>
-<td width="33%"><img src="docs/Bus.jpg" alt="London bus arrivals"></td>
-<td width="33%"><img src="docs/River.jpg" alt="Thames river boat sailings"></td>
+<td width="25%"><img src="docs/Train.jpg" alt="Train departures"></td>
+<td width="25%"><img src="docs/Bus.jpg" alt="London bus arrivals"></td>
+<td width="25%"><img src="docs/Tube.png" alt="London Underground arrivals"></td>
+<td width="25%"><img src="docs/River.jpg" alt="Thames river boat sailings"></td>
 </tr>
 <tr>
 <td align="center"><b>Trains</b><br><sub>Any UK station, live from National Rail</sub></td>
 <td align="center"><b>Buses</b><br><sub>Any London stop — free, no key needed</sub></td>
+<td align="center"><b>London Underground</b><br><sub>Any Tube station — free, no key needed</sub></td>
 <td align="center"><b>River boats</b><br><sub>Thames Clippers &amp; the Woolwich Ferry</sub></td>
 </tr>
 </table>
@@ -63,8 +66,8 @@ proper dot-matrix font. Enable any combination — the board cycles through them
 |---|---|
 | 🚆 **Trains** | Anywhere in the UK, from National Rail. Filter to a destination or platform |
 | 🚌 **Buses** | Every London stop, live from TfL — **free and keyless**. Rest of the UK via [TransportAPI](docs/transportapi-key.md) |
+| 🚇 **London Underground** | Any Tube station, live from TfL — **free and keyless**. One line in one direction, so every row is a train you can catch |
 | ⛴️ **River boats** | Uber Boat by Thames Clippers (RB1/RB4/RB6) and the Woolwich Ferry |
-| 🚇 **Underground** | Any Tube station, live from TfL — **free and keyless**. One line in one direction, so every row is a train you can catch |
 | 🌦️ **Weather** | Right where your stop is. No extra setup, no second account |
 | 🕐 **Clock** | NTP-accurate, automatic BST, fills the screen on demand |
 
@@ -228,6 +231,7 @@ times.
 | | Key needed? |
 |---|---|
 | London buses | **No.** TfL's feed is open |
+| London Underground | **No.** Same feed |
 | Thames river boats | **No.** Same feed |
 | Weather | **No** |
 | Clock | **No** |
@@ -292,7 +296,7 @@ photo.
 > [Raspberry Pi rewrite](https://github.com/OktaneZA/PiDepartures). Full lineage
 > in [REQUIREMENTS.md](REQUIREMENTS.md).
 >
-> Bus and river data provided by **Transport for London**. Train data from
+> Bus, Underground and river data provided by **Transport for London**. Train data from
 > **National Rail Darwin** via the [Rail Data Marketplace](https://raildata.org.uk).
 > Station positions contain public sector information licensed under the
 > [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
