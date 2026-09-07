@@ -1120,6 +1120,56 @@ def tube_wizard(defaults, required=False):
 
 
 # --------------------------------------------------------------------------- #
+# Weather (Open-Meteo)
+# --------------------------------------------------------------------------- #
+def weather_wizard(defaults):
+    """Where the weather screen reports for. Returns (lat, lon, name).
+
+    The web page never asks this: it reuses the coordinates of whatever stop,
+    station or pier was picked. Here the pickers do not all carry coordinates
+    back, so it is asked once instead - same result on the board, one more
+    question on the way. A postcode or a place name both work, through the same
+    two lookups the stop search already uses."""
+    print("\nWeather")
+    print("  Current conditions for one place, from Open-Meteo - no key needed.")
+
+    stored = defaults.get("wname", "")
+    have_stored = (str(defaults.get("wlat", "")) not in ("", "None", str(-2147483648))
+                   and stored)
+    if have_stored:
+        keep = ask("  Keep the weather where it is (%s)? [Y/n]" % stored, "y").lower()
+        if keep in ("y", "yes"):
+            return None, None, None        # None = leave the board's own values
+
+    while True:
+        where = ask("  Postcode or place name for the weather", stored)
+        if not where:
+            print("  ! Nothing to look up - skipping the weather screen.")
+            return "", "", ""
+
+        pc = geocode_postcode(where)
+        if pc:
+            lat, lon = pc
+            print("  -> Weather for %s." % where.upper())
+            return round(lat * 100000), round(lon * 100000), where.upper()
+
+        matches = geocode_place(where)
+        if not matches:
+            print("  ! Couldn't find that. Try a postcode, or a nearby place name.")
+            continue
+        if len(matches) == 1:
+            m = matches[0]
+        else:
+            print("  Which one?")
+            for i, m in enumerate(matches):
+                print("    [%2d] %s" % (i, m["name"]))
+            idx = ask("  Choose", "0", cast=int, lo=0, hi=len(matches) - 1)
+            m = matches[idx]
+        print("  -> Weather for %s." % m["name"])
+        return round(m["lat"] * 100000), round(m["lon"] * 100000), m["name"]
+
+
+# --------------------------------------------------------------------------- #
 # Serial helpers
 # --------------------------------------------------------------------------- #
 def list_candidate_ports():
@@ -1294,11 +1344,18 @@ def ask(prompt, default="", required=False, cast=str, lo=None, hi=None):
         return val
 
 
+# Port of web/js/config.js's SERVICES. Order matters twice over: it is the order
+# the board cycles screens in, and parse_mode() below keeps only the ids listed
+# here. Weather and the clock were missing from this list long after the web page
+# and the firmware grew them, which quietly dropped both from `mode` whenever a
+# web-configured board was reconfigured with the .exe.
 SERVICES = [
     ("train", "Trains", "UK-wide, National Rail"),
     ("bus", "Buses", "London free; elsewhere needs a TransportAPI key"),
     ("river", "River boats", "Uber Boat by Thames Clippers + Woolwich Ferry"),
-    ("tube", "Underground", "One line in one direction - no key needed"),
+    ("tube", "London Underground", "One line in one direction - no key needed"),
+    ("weather", "Weather", "Current conditions for a place you choose"),
+    ("clock", "Big clock", "The time, filling the screen"),
 ]
 
 
@@ -1471,10 +1528,18 @@ def wizard(defaults=None, on_board=False):
         (cfg["tube"], cfg["tubeline"], cfg["tubedir"],
          cfg["tubename"]) = tube_wizard(d, required=(services == ["tube"]))
 
+    if "weather" not in services:
+        cfg["wlat"] = cfg["wlon"] = cfg["wname"] = None
+    else:
+        cfg["wlat"], cfg["wlon"], cfg["wname"] = weather_wizard(d)
+
+    # The clock asks for nothing: it needs no feed and no location.
+
     # A service chosen in Part 2 but then left without a stop, pier or station
     # would put a screen in the rotation with nothing behind it, so drop it from
     # the set rather than storing a mode the board cannot honour.
-    for name, key in (("bus", "bus"), ("river", "river"), ("tube", "tube")):
+    for name, key in (("bus", "bus"), ("river", "river"), ("tube", "tube"),
+                      ("weather", "wlat")):
         if name in services and cfg.get(key) == "":
             services.remove(name)
             print(f"  ({name} screen left off - nothing was selected)")
@@ -1512,6 +1577,8 @@ def summary(cfg):
         station = cfg.get("tubename") or cfg["tube"]
         print(f"    Tube        {station} - {tube_line_label(cfg['tubeline'])}, "
               f"{cfg['tubedir']}")
+    if "weather" in services and cfg.get("wname"):
+        print(f"    Weather     {cfg['wname']}")
     if cfg["bstart"] != -1 and cfg["bend"] != -1:
         print(f"    Screen on   {cfg['bend']:02d}:00 - {cfg['bstart']:02d}:00")
     else:

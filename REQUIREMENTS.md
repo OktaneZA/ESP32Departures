@@ -8,10 +8,11 @@ from the National Rail Live Departure Board (LDBWS) JSON API and renders them on
 the board's built-in colour LCD — no host computer, server, or cloud service.
 
 It can also show **live London bus arrivals** for one bus stop, from TfL's open
-Countdown feed, and **live river boat sailings** for one Thames pier — Uber Boat
-by Thames Clippers and the Woolwich Ferry — from TfL's Unified API. Every
-service is optional and independent: the board shows any combination and cycles
-through whichever are enabled.
+Countdown feed; **live river boat sailings** for one Thames pier — Uber Boat by
+Thames Clippers and the Woolwich Ferry; and **live London Underground arrivals**
+for one line at one station in one direction — both from TfL's Unified API.
+Every service is optional and independent: the board shows any combination and
+cycles through whichever are enabled.
 
 This document is a **retrospective** specification: it records the requirements
 the delivered firmware and installer actually satisfy.
@@ -100,16 +101,18 @@ Incompatible look-alikes (different display/driver): T-Display-S3 **AMOLED**
 | Packaging | `pyinstaller` (one-file exe) |
 | Timezone | `tzlocal` + `tzdata` (optional; detects the PC's POSIX TZ) |
 
-The installer reaches three services, all keyless and all on the user's PC only:
-the TfL Countdown feed (verifying a bus stop and searching for one), TfL's
-StopPoint search and postcodes.io (turning a name or postcode into coordinates),
-and the LDBWS endpoint (verifying the station and API key).
+The installer reaches four services, all keyless and all on the user's PC only:
+the TfL Countdown feed (verifying a bus stop and searching for one), the TfL
+Unified API (listing piers, and Tube lines, stations and directions), TfL's
+StopPoint search and postcodes.io (turning a name or postcode into coordinates,
+for the stop search and the weather), and the LDBWS endpoint (verifying the
+station and API key).
 
 **Documentation tooling** (`docs/`, not required to build or run):
 
 | Component | Purpose |
 |---|---|
-| `render_mockup.py` (Pillow) | Pixel-accurate renders of all three boards, mirroring `display.cpp` — colours derived from its RGB565 constants, and any theme renderable by passing a palette |
+| `render_mockup.py` (Pillow) | Pixel-accurate renders of every board, mirroring `display.cpp` — colours derived from its RGB565 constants, and any theme renderable by passing a palette |
 | `ttf_to_lgfx.py` | Converts the dot-matrix TTFs to an `lgfx::GFXfont` header |
 
 ---
@@ -579,6 +582,10 @@ PyInstaller) that flashes the firmware and provisions the board.
 | INST-27 | A service is opted into **once**, in Part 2. The stop and pier sections ask *which*, never *whether* — and a service chosen there but then left without a stop or pier is pruned from `mode`, so the board is never enabled for a screen with nothing behind it |
 | INST-28 | Pier names are folded to ASCII before being shown or stored: TfL returns "St Mary's Wandsworth Pier" with a U+2019 quote, which the board's font cannot draw |
 | INST-29 | The exe is built by CI on a tag and published as a GitHub Release, with a SHA-256 beside it. The firmware is **compiled from that tag's source** in the same job rather than taken from whatever is committed in `installer/firmware/`, so a release always ships an installer and a firmware image from one commit |
+| INST-31 | The installer's service list carries **every** id the firmware and the web page know, in the same order. It is the list `parse_mode()` filters against, so an id missing from it is silently stripped from `mode`: weather and the clock were absent long after both shipped, which dropped them from any web-configured board that was later reconfigured with the exe |
+| INST-32 | **Tube stations are chosen by name from chained lists** — line, then station, then direction — never by typing a Naptan. Each list is fetched live from TfL, and the direction list is sampled from the live feed because the tokens on offer vary by station (TUBE-04) |
+| INST-33 | The installer stores the Tube station's display name (`tubename`), satisfying TUBE-17 as INST-24 does for piers |
+| INST-34 | The weather location is **asked for** rather than inherited. The web page reuses the coordinates of whatever stop it already looked up; the exe's pickers do not all carry coordinates back, so it asks once for a postcode or place name and resolves it through the same two lookups the stop search uses. An already-configured board offers to keep what it has |
 | INST-30 | The exe is unsigned, so Windows SmartScreen warns about it. A code-signing certificate costs more per year than the hardware; the published checksum is the alternative, and the warning is documented rather than left to surprise people |
 
 ---
