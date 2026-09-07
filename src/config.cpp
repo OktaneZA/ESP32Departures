@@ -12,8 +12,9 @@
 //   HASH                 -> md5/size of the running firmware, then END
 //
 // Keys: ssid pass key dep dest plat tz bus busline river riverline rivername mode
+//       tube tubeline tubedir tubename
 //       busprov busid buskey busbudget bstart bend bright refr colfg coldim colwarn colbg dwtrain
-//       dwbus dwriver dwclock dwwx wlat wlon wname nmode
+//       dwbus dwriver dwtube dwclock dwwx wlat wlon wname nmode
 
 #include "config.h"
 #include "app_config.h"   // compile-time defaults
@@ -49,6 +50,12 @@ void load_from_nvs(Config& c) {
     c.river_pier  = prefs.getString("riv",   "");
     c.river_line  = prefs.getString("rivln", "");
     c.river_name  = prefs.getString("rivnm", "");
+    // NVS keys are capped at 15 characters, so these are abbreviated the way the
+    // river's are — the wire keys they arrive under are the longer names.
+    c.tube_stop   = prefs.getString("tube",  "");
+    c.tube_line   = prefs.getString("tubeln", "");
+    c.tube_dir    = prefs.getString("tubedir", "");
+    c.tube_name   = prefs.getString("tubenm", "");
     c.mode        = prefs.getString("mode", "");   // "" = train+bus (pre-mode configs)
     c.blank_start = prefs.getInt("bstart", -1);
     c.blank_end   = prefs.getInt("bend",   -1);
@@ -64,6 +71,7 @@ void load_from_nvs(Config& c) {
     c.dwell_train = prefs.getInt("dwtrain", -1);
     c.dwell_bus   = prefs.getInt("dwbus",  -1);
     c.dwell_river = prefs.getInt("dwriver", -1);
+    c.dwell_tube  = prefs.getInt("dwtube", -1);
     c.dwell_clock = prefs.getInt("dwclock", -1);
     c.dwell_wx    = prefs.getInt("dwwx",   -1);
     c.wx_lat      = prefs.getInt("wlat",   INT32_MIN);
@@ -96,6 +104,10 @@ void stage_kv(const String& kv) {
     else if (k == "river")  g_stage.river_pier = v;
     else if (k == "riverline") g_stage.river_line = v;
     else if (k == "rivername") g_stage.river_name = v;
+    else if (k == "tube")   g_stage.tube_stop  = v;
+    else if (k == "tubeline") g_stage.tube_line = v;
+    else if (k == "tubedir") g_stage.tube_dir  = v;
+    else if (k == "tubename") g_stage.tube_name = v;
     else if (k == "mode")   g_stage.mode       = v;
     else if (k == "bstart") g_stage.blank_start = v.toInt();
     else if (k == "bend")   g_stage.blank_end   = v.toInt();
@@ -108,6 +120,7 @@ void stage_kv(const String& kv) {
     else if (k == "dwtrain") g_stage.dwell_train = v.toInt();
     else if (k == "dwbus")  g_stage.dwell_bus   = v.toInt();
     else if (k == "dwriver") g_stage.dwell_river = v.toInt();
+    else if (k == "dwtube") g_stage.dwell_tube  = v.toInt();
     else if (k == "dwclock") g_stage.dwell_clock = v.toInt();
     else if (k == "dwwx")   g_stage.dwell_wx    = v.toInt();
     else if (k == "wlat")   g_stage.wx_lat      = v.toInt();
@@ -138,6 +151,10 @@ void commit_and_reboot() {
     prefs.putString("riv",   g_stage.river_pier);
     prefs.putString("rivln", g_stage.river_line);
     prefs.putString("rivnm", g_stage.river_name);
+    prefs.putString("tube",  g_stage.tube_stop);
+    prefs.putString("tubeln", g_stage.tube_line);
+    prefs.putString("tubedir", g_stage.tube_dir);
+    prefs.putString("tubenm", g_stage.tube_name);
     prefs.putString("mode", g_stage.mode);
     prefs.putInt("bstart", g_stage.blank_start);
     prefs.putInt("bend",   g_stage.blank_end);
@@ -150,6 +167,7 @@ void commit_and_reboot() {
     prefs.putInt("dwtrain", g_stage.dwell_train);
     prefs.putInt("dwbus",  g_stage.dwell_bus);
     prefs.putInt("dwriver", g_stage.dwell_river);
+    prefs.putInt("dwtube", g_stage.dwell_tube);
     prefs.putInt("dwclock", g_stage.dwell_clock);
     prefs.putInt("dwwx",   g_stage.dwell_wx);
     prefs.putInt("wlat",   g_stage.wx_lat);
@@ -242,6 +260,10 @@ void handle_line(String line) {
         Serial.print("river=");  Serial.println(g_cfg.river_pier);
         Serial.print("riverline="); Serial.println(g_cfg.river_line);
         Serial.print("rivername="); Serial.println(g_cfg.river_name);
+        Serial.print("tube=");   Serial.println(g_cfg.tube_stop);
+        Serial.print("tubeline="); Serial.println(g_cfg.tube_line);
+        Serial.print("tubedir="); Serial.println(g_cfg.tube_dir);
+        Serial.print("tubename="); Serial.println(g_cfg.tube_name);
         // Report the legacy word as the set it means, so the installer only
         // ever has to understand the comma-separated form.
         Serial.print("mode=");   Serial.println(
@@ -261,6 +283,7 @@ void handle_line(String line) {
         Serial.print("dwtrain="); Serial.println(g_cfg.dwell_train);
         Serial.print("dwbus=");  Serial.println(g_cfg.dwell_bus);
         Serial.print("dwriver="); Serial.println(g_cfg.dwell_river);
+        Serial.print("dwtube="); Serial.println(g_cfg.dwell_tube);
         Serial.print("dwclock="); Serial.println(g_cfg.dwell_clock);
         Serial.print("dwwx=");   Serial.println(g_cfg.dwell_wx);
         Serial.print("wlat=");   Serial.println(g_cfg.wx_lat);

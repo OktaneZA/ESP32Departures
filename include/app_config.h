@@ -110,6 +110,37 @@
 #define RAW_RIVER_DEBUG       0
 
 // -----------------------------------------------------------------------------
+// London Underground arrivals (TfL Unified API) — optional fourth screen.
+//
+// The same open feed as the river bus, asked one line at a time. Only active
+// when a station, a line and a direction are all provisioned; see tube_api.cpp
+// for why all three are required rather than optional.
+// -----------------------------------------------------------------------------
+
+// How many Tube arrivals to show (see BOARD_LIST_ROWS).
+#define MAX_TUBE_ARRIVALS     BOARD_LIST_ROWS
+
+// How long the Tube screen stays up in the rotation (seconds).
+#define TUBE_SCREEN_SECONDS   15
+
+// How often to poll TfL for fresh predictions (seconds). Same 30s cache at
+// source as the bus feed, and the same reason not to poll inside it.
+#define TUBE_REFRESH_SECONDS  30
+
+// Ignore trains further out than this (minutes). A tube runs every two or three
+// minutes off-peak, so the four rows are always filled from the next quarter of
+// an hour; a wider window would only admit predictions too vague to trust.
+#define TUBE_MAX_ETA_MINUTES  20
+
+// Hard cap on the TfL response we will buffer (bytes). The measured worst case
+// across the network is ~19 KB (Piccadilly at King's Cross); anything larger is
+// treated as a failed fetch rather than being allowed to exhaust the heap.
+#define TUBE_MAX_RESPONSE     24576
+
+// Dump the parsed Tube predictions to Serial once per poll.
+#define RAW_TUBE_DEBUG        0
+
+// -----------------------------------------------------------------------------
 // Big clock and weather — optional extra screens.
 // -----------------------------------------------------------------------------
 

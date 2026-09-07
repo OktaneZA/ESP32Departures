@@ -27,6 +27,7 @@
 #include "rail_api.h"
 #include "bus_api.h"
 #include "river_api.h"
+#include "tube_api.h"
 #include "weather_api.h"
 
 // ---------------------------------------------------------------------------
@@ -57,6 +58,15 @@ static bool     g_badPier = false;      // pier rejected by TfL (HTTP 404)
 static bool     g_riverHaveData = false;
 static uint32_t g_riverFetchedMs = 0;
 static uint32_t g_riverEpoch = 0;
+
+// Tube screen state (only touched when a station, line and direction are set).
+static std::vector<TubeArrival> g_tube;
+static String   g_tubeStationName;
+static int      g_tubeErrCount = 0;
+static bool     g_badTubeStation = false;  // line or station rejected by TfL (HTTP 404)
+static bool     g_tubeHaveData = false;
+static uint32_t g_tubeFetchedMs = 0;
+static uint32_t g_tubeEpoch = 0;
 
 // Weather screen state (only touched when a position is configured).
 static Weather  g_wx;
@@ -245,6 +255,48 @@ static uint32_t fetchRiverOnce() {
     return wait;
 }
 
+// Poll the TfL Tube feed once and publish the result. Returns how long to wait.
+static uint32_t fetchTubeOnce() {
+    std::vector<TubeArrival> trains;
+    String stationName;
+    tube::Fetch st = tube::fetchArrivals(cfg::get(), trains, stationName);
+    bool ok = (st == tube::Fetch::Ok);
+
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    if (ok) {
+        g_tube = trains;
+        g_tubeStationName = stationName;
+        g_tubeErrCount = 0;
+        g_badTubeStation = false;
+        g_tubeHaveData = true;
+        g_tubeFetchedMs = millis();
+    } else if (st == tube::Fetch::BadStation) {
+        g_badTubeStation = true;   // config error — drop the tube screen
+        g_tubeHaveData = false;
+        g_tubeErrCount = 0;
+    } else {
+        g_tubeErrCount++;          // keep last-good trains on screen (stale)
+        g_badTubeStation = false;
+    }
+    g_tubeEpoch++;
+    int fails = g_tubeErrCount;
+    xSemaphoreGive(g_mutex);
+
+    if (ok) {
+        Serial.printf("[tube] ok: %d trains at %s\n", (int)trains.size(), stationName.c_str());
+        return TUBE_REFRESH_SECONDS * 1000UL;
+    }
+    if (st == tube::Fetch::BadStation) {
+        Serial.printf("[tube] unknown line/station '%s'/'%s' - tube screen disabled "
+                      "until reconfigured\n",
+                      cfg::get().tube_line.c_str(), cfg::get().tube_stop.c_str());
+        return 300000;   // a wrong code will not fix itself; check back rarely
+    }
+    uint32_t wait = backoffMs(fails);
+    Serial.printf("[tube] failed (%d) - retry in %us\n", fails, wait / 1000);
+    return wait;
+}
+
 // Poll Open-Meteo once and publish the result. Returns how long to wait.
 static uint32_t fetchWeatherOnce() {
     Weather wx;
@@ -299,6 +351,7 @@ static void fetchTask(void*) {
     uint32_t nextTrain = millis();
     uint32_t nextBus = millis();
     uint32_t nextRiver = millis();
+    uint32_t nextTube = millis();
     uint32_t nextWx = millis();
 
     for (;;) {
@@ -313,6 +366,9 @@ static void fetchTask(void*) {
         }
         if (cfg::get().river_enabled() && (int32_t)(millis() - nextRiver) >= 0) {
             nextRiver = millis() + fetchRiverOnce();
+        }
+        if (cfg::get().tube_enabled() && (int32_t)(millis() - nextTube) >= 0) {
+            nextTube = millis() + fetchTubeOnce();
         }
         if (cfg::get().weather_enabled() && (int32_t)(millis() - nextWx) >= 0) {
             nextWx = millis() + fetchWeatherOnce();
@@ -345,12 +401,13 @@ void setup() {
 
     cfg::load();
     const Config& c = cfg::get();
-    Serial.printf("[boot] provisioned=%d mode=%s station=%s bus=%s pier=%s\n",
+    Serial.printf("[boot] provisioned=%d mode=%s station=%s bus=%s pier=%s tube=%s/%s/%s\n",
                   c.provisioned(), c.mode.length() ? c.mode.c_str() : "train,bus",
-                  c.dep_crs.c_str(), c.bus_stop.c_str(), c.river_pier.c_str());
-    Serial.printf("[boot] screens: train=%d bus=%d river=%d weather=%d clock=%d\n",
+                  c.dep_crs.c_str(), c.bus_stop.c_str(), c.river_pier.c_str(),
+                  c.tube_stop.c_str(), c.tube_line.c_str(), c.tube_dir.c_str());
+    Serial.printf("[boot] screens: train=%d bus=%d river=%d tube=%d weather=%d clock=%d\n",
                   c.train_enabled(), c.bus_enabled(), c.river_enabled(),
-                  c.weather_enabled(), c.clock_enabled());
+                  c.tube_enabled(), c.weather_enabled(), c.clock_enabled());
     Serial.printf("[boot] weather at %d,%d (%s)\n",
                   c.wx_lat, c.wx_lon, c.wx_name.c_str());
 
@@ -386,17 +443,19 @@ void setup() {
 // ---------------------------------------------------------------------------
 // Screen rotation
 //
-// The user enables any combination of trains, London buses and river boats, and
-// the board cycles through whichever are on — train (30s) -> bus (15s) ->
-// river (15s) -> train -> ... With a single service it simply stays put.
+// The user enables any combination of trains, London buses, river boats and the
+// Tube, and the board cycles through whichever are on — train (30s) -> bus (15s)
+// -> river (15s) -> tube (15s) -> train -> ... With a single service it simply
+// stays put.
 //
-// The two TfL screens also have to *earn* their slot by TfL having answered for
-// the stop or pier at least once, so an ID TfL rejects costs the user nothing
-// but that one screen. When nothing has earned a slot yet and there is no train
-// screen to fall back on, the board says what it is waiting for rather than
-// showing an empty departure board for a station that was never configured.
+// The three TfL screens also have to *earn* their slot by TfL having answered
+// for the stop, pier or station at least once, so an ID TfL rejects costs the
+// user nothing but that one screen. When nothing has earned a slot yet and there
+// is no train screen to fall back on, the board says what it is waiting for
+// rather than showing an empty departure board for a station that was never
+// configured.
 // ---------------------------------------------------------------------------
-enum class Screen { Train, Bus, River, Clock, Weather };
+enum class Screen { Train, Bus, River, Tube, Clock, Weather };
 
 // How long a screen holds before the rotation moves on. The provisioned value
 // wins when there is one; otherwise the app_config.h default applies, so a board
@@ -412,6 +471,9 @@ static uint32_t dwellMs(Screen s) {
             break;
         case Screen::River:
             seconds = Config::pick(c.dwell_river, RIVER_SCREEN_SECONDS, 3, 300);
+            break;
+        case Screen::Tube:
+            seconds = Config::pick(c.dwell_tube, TUBE_SCREEN_SECONDS, 3, 300);
             break;
         case Screen::Clock:
             seconds = Config::pick(c.dwell_clock, CLOCK_SCREEN_SECONDS, 3, 300);
@@ -454,6 +516,13 @@ void loop() {
     static bool riverReady = false;
     static uint32_t riverFetchedMs = 0;
 
+    static uint32_t lastTubeEpoch = 0xFFFFFFFF;
+    static std::vector<TubeArrival> tubeTrains;
+    static String tubeStation;
+    static int tubeErr = 0;
+    static bool tubeReady = false;
+    static uint32_t tubeFetchedMs = 0;
+
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     uint32_t epoch = g_epoch;
     err = g_errCount;
@@ -481,6 +550,15 @@ void loop() {
         river = g_river;
         riverPier = g_riverPierName;
         lastRiverEpoch = riverEpoch;
+    }
+    uint32_t tubeEpoch = g_tubeEpoch;
+    tubeErr = g_tubeErrCount;
+    tubeReady = g_tubeHaveData;
+    tubeFetchedMs = g_tubeFetchedMs;
+    if (tubeEpoch != lastTubeEpoch) {
+        tubeTrains = g_tube;
+        tubeStation = g_tubeStationName;
+        lastTubeEpoch = tubeEpoch;
     }
     uint32_t wxEpoch = g_wxEpoch;
     wxErr = g_wxErrCount;
@@ -537,11 +615,12 @@ void loop() {
 
     // Which screens are in the rotation this frame, in a fixed order so the
     // cycle stays predictable as feeds come and go.
-    Screen active[5];
+    Screen active[6];
     int nActive = 0;
     if (c.train_enabled())               active[nActive++] = Screen::Train;
     if (c.bus_enabled() && busReady)     active[nActive++] = Screen::Bus;
     if (c.river_enabled() && riverReady) active[nActive++] = Screen::River;
+    if (c.tube_enabled() && tubeReady)   active[nActive++] = Screen::Tube;
     if (c.weather_enabled() && wxReady)  active[nActive++] = Screen::Weather;
     // The clock needs no feed, so unlike the others it is ready the moment it
     // is asked for — and it is what a board with nothing else shows.
@@ -586,13 +665,14 @@ void loop() {
     if (clockHold) {
         ui::renderClock(false, 0, 0);
     } else if (nActive == 0) {
-        // Trains are off and neither TfL feed has answered yet. Report the
-        // worse of the two failures, since a board with no screen at all is
-        // almost always a network problem rather than a quiet stop.
+        // Trains are off and no TfL feed has answered yet. Report the worst of
+        // the failures, since a board with no screen at all is almost always a
+        // network problem rather than a quiet stop.
         int worst = 0;
         String label;
         if (c.bus_enabled() && busErr > worst) { worst = busErr; label = c.bus_stop; }
         if (c.river_enabled() && riverErr > worst) { worst = riverErr; label = c.river_name.length() ? c.river_name : c.river_pier; }
+        if (c.tube_enabled() && tubeErr > worst) { worst = tubeErr; label = c.tube_name.length() ? c.tube_name : c.tube_stop; }
         if (worst >= 3) {
             ui::renderConnectivityWarning(label, worst);
         } else {
@@ -602,6 +682,9 @@ void loop() {
         ui::renderBusBoard(bus, busStop, c.bus_line, millis() - busFetchedMs, busErr);
     } else if (screen == Screen::River) {
         ui::renderRiverBoard(river, riverPier, c.river_line, millis() - riverFetchedMs, riverErr);
+    } else if (screen == Screen::Tube) {
+        ui::renderTubeBoard(tubeTrains, tubeStation, tube::lineLabel(c.tube_line),
+                            millis() - tubeFetchedMs, tubeErr);
     } else if (screen == Screen::Weather) {
         ui::renderWeatherBoard(wx, c.wx_name.length() ? c.wx_name : String("Weather"), wxErr);
     } else if (screen == Screen::Clock) {

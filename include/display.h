@@ -43,6 +43,16 @@ void renderBusBoard(const std::vector<BusArrival>& arrivals, const String& stopN
 void renderRiverBoard(const std::vector<RiverArrival>& arrivals, const String& pierName,
                       const String& lineFilter, uint32_t sinceFetchMs, int errCount);
 
+// Render one full frame of the London Underground screen. Identical contract to
+// renderBusBoard() again — a Tube train and a boat carry the same three fields,
+// so this is the same board with a different label on it.
+//
+// `lineName` is the Tube line, already shortened for the header by whoever
+// provisioned it ("H&C", not "Hammersmith & City"); the direction is not passed
+// separately because it rides in each row's route column.
+void renderTubeBoard(const std::vector<TubeArrival>& arrivals, const String& stationName,
+                     const String& lineName, uint32_t sinceFetchMs, int errCount);
+
 // Render one full frame of the big-clock screen: HH:MM filling the panel in the
 // provisioned palette.
 //

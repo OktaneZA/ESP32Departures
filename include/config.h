@@ -21,6 +21,10 @@ struct Config {
     String river_pier;   // optional TfL pier Naptan, e.g. "930GCAW" ("" = off)
     String river_line;   // optional river route filter, e.g. "RB1" ("" = all)
     String river_name;   // friendly pier name from the installer, e.g. "Canary Wharf Pier"
+    String tube_stop;    // TfL station Naptan, e.g. "940GZZLUKSX" ("" = tube screen off)
+    String tube_line;    // TfL line id, e.g. "victoria"
+    String tube_dir;     // platform token, e.g. "Northbound" or "Platform 2"
+    String tube_name;    // friendly station name from the installer, e.g. "King's Cross"
     String mode;         // comma-separated set, e.g. "train,bus,river" (see wants())
     int    blank_start = -1;   // screen-blank start hour (-1 = off)
     int    blank_end   = -1;   // screen-blank end hour (-1 = off)
@@ -45,6 +49,7 @@ struct Config {
     int    dwell_train = -1;   // seconds the train screen holds (-1 = default)
     int    dwell_bus   = -1;   // seconds the bus screen holds
     int    dwell_river = -1;   // seconds the river screen holds
+    int    dwell_tube  = -1;   // seconds the tube screen holds
     int    dwell_clock = -1;   // seconds the big-clock screen holds
     int    dwell_wx    = -1;   // seconds the weather screen holds
 
@@ -75,8 +80,15 @@ struct Config {
     // "both" both mean the trains-and-buses board that predates the river
     // screen. A lone "train" or "bus" needs no special case — it is already a
     // one-element set, and the token match below handles it as written.
+    //
+    // The screens added after that word stopped being written are excluded by
+    // name, so a legacy config gains nothing it did not ask for on upgrade.
+    // (The clock is not among them: it was already reachable this way, and
+    // taking it back would change what a working board shows.)
     bool wants(const char* service) const {
-        if (mode.isEmpty() || mode == "both") return strcmp(service, "river") != 0;
+        if (mode.isEmpty() || mode == "both") {
+            return strcmp(service, "river") != 0 && strcmp(service, "tube") != 0;
+        }
         for (int start = 0; start <= (int)mode.length(); ) {
             int comma = mode.indexOf(',', start);
             if (comma < 0) comma = mode.length();
@@ -89,6 +101,7 @@ struct Config {
     bool wants_train() const { return wants("train"); }
     bool wants_bus() const { return wants("bus"); }
     bool wants_river() const { return wants("river"); }
+    bool wants_tube() const { return wants("tube"); }
     bool wants_clock() const { return wants("clock"); }
     bool wants_weather() const { return wants("weather"); }
 
@@ -110,6 +123,15 @@ struct Config {
         return bus_national() ? (bus_id.length() && bus_key.length()) : true;
     }
     bool river_enabled() const { return wants_river() && river_pier.length(); }
+
+    // Unlike the river's optional route filter, all three Tube settings are
+    // required: the station says which page of the feed to ask for, and the line
+    // and direction are what keep the answer small enough to hold and short
+    // enough to read. A partial config would put an unusable screen in the
+    // rotation, so it puts none there instead.
+    bool tube_enabled() const {
+        return wants_tube() && tube_stop.length() && tube_line.length() && tube_dir.length();
+    }
 
     // The clock needs nothing but the wish for it.
     bool clock_enabled() const { return wants_clock(); }
@@ -161,7 +183,7 @@ struct Config {
     bool provisioned() const {
         return wifi_ssid.length() &&
                (train_enabled() || bus_enabled() || river_enabled() ||
-                clock_enabled() || weather_enabled());
+                tube_enabled() || clock_enabled() || weather_enabled());
     }
 };
 

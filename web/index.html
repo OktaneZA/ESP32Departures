@@ -174,6 +174,26 @@
       <input id="riverline" type="text" placeholder="e.g. RB1 — blank shows every route">
     </div>
   </div>
+  <!-- London Underground -->
+  <div class="svc" id="svc-tube" hidden>
+    <h3>London Underground</h3>
+    <div class="field">
+      <label for="tubeLineSelect">Line</label>
+      <select id="tubeLineSelect"><option value="">Loading lines from TfL…</option></select>
+    </div>
+    <div class="field">
+      <label for="tubeStationSelect">Station</label>
+      <select id="tubeStationSelect" disabled><option value="">Choose a line first…</option></select>
+    </div>
+    <div class="field">
+      <label for="tubeDirSelect">Direction</label>
+      <select id="tubeDirSelect" disabled><option value="">Choose a station first…</option></select>
+      <p class="hint">One line in one direction, because a station like King’s Cross
+         has six lines running both ways and the screen holds three trains. Needs no
+         key, like the bus and river feeds.</p>
+      <p class="chosen" id="tubeChosen" hidden></p>
+    </div>
+  </div>
   <!-- Weather -->
   <div class="svc" id="svc-weather" hidden>
     <h3>Weather</h3>

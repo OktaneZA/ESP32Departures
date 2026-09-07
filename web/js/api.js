@@ -395,6 +395,156 @@ export async function riverArrivals(pier, lineFilter = '') {
   return { status: 'ok', rows };
 }
 
+// --- tube -------------------------------------------------------------------
+// Same open Unified API as the river picker, asked in three steps: line, then
+// station on that line, then which direction at that station. All three end up
+// on the device, because tube_api.cpp needs all three to keep a response small
+// enough to hold and short enough to read.
+
+// The screen's label for a line id, and the one thing here that must agree with
+// the firmware: tube_api.cpp's lineLabel() shortens the same two names, because
+// the header sets this beside a station name that needs the room.
+export function tubeLineLabel(lineId) {
+  if (lineId === 'hammersmith-city') return 'H&C';
+  if (lineId === 'waterloo-city') return 'W&C';
+  return lineId.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+// The eleven Underground lines, from TfL rather than a hardcoded list, so a
+// line TfL adds or renames arrives without a code change.
+export async function tubeLines() {
+  const data = await getJson(`${TFL_API}/Line/Mode/tube`);
+  const out = (Array.isArray(data) ? data : [])
+    .filter((l) => l.id)
+    .map((l) => ({ id: l.id, name: plain(l.name || l.id) }));
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
+}
+
+// Every station on one line. Filtered to NaptanMetroStation: the same endpoint
+// also returns platforms, entrances and access areas, and only the station
+// aggregates the whole stop the way the board wants.
+export async function tubeStations(lineId) {
+  const data = await getJson(`${TFL_API}/Line/${encodeURIComponent(lineId)}/StopPoints`);
+  const out = [];
+  for (const sp of Array.isArray(data) ? data : []) {
+    if (sp.stopType !== 'NaptanMetroStation' || !sp.id) continue;
+    out.push({
+      id: sp.id,
+      name: plain(String(sp.commonName || sp.id).replace(/ Underground Station$/, '')),
+      lat: sp.lat != null ? Number(sp.lat) : null,
+      lon: sp.lon != null ? Number(sp.lon) : null,
+    });
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
+}
+
+// What the firmware matches a direction on. TfL's platformName is either
+// "Northbound - Platform 3" or a bare "Platform 2"; the part before the " - "
+// is the token, and tube_api.cpp's platformToken() splits it exactly here.
+export function platformToken(platformName) {
+  const s = String(platformName || '');
+  const i = s.indexOf(' - ');
+  return (i < 0 ? s : s.slice(0, i)).trim();
+}
+
+// Fallback directions per line, for when the live sample below comes back
+// empty — engineering hours, a suspended line, or simply the small hours.
+// Without this the wizard would dead-end on a station that is perfectly fine
+// by morning. Mirrored in installer.py as TUBE_DIRECTIONS_FALLBACK.
+const TUBE_DIRECTIONS_FALLBACK = {
+  bakerloo: ['Northbound', 'Southbound'],
+  central: ['Eastbound', 'Westbound'],
+  circle: ['Eastbound', 'Westbound'],
+  district: ['Eastbound', 'Westbound'],
+  'hammersmith-city': ['Eastbound', 'Westbound'],
+  jubilee: ['Northbound', 'Southbound'],
+  metropolitan: ['Northbound', 'Southbound'],
+  northern: ['Northbound', 'Southbound'],
+  piccadilly: ['Eastbound', 'Westbound'],
+  victoria: ['Northbound', 'Southbound'],
+  'waterloo-city': ['Eastbound', 'Westbound'],
+};
+
+// The directions actually available for one line at one station, sampled from
+// the live feed because they vary by station: most of the District line is
+// Eastbound/Westbound, but at Edgware Road TfL gives no compass word at all and
+// the only thing separating the two directions is the platform number.
+export async function tubeDirections(lineId, station) {
+  let data = null;
+  try {
+    data = await getJson(
+      `${TFL_API}/Line/${encodeURIComponent(lineId)}/Arrivals/${encodeURIComponent(station)}`);
+  } catch { /* fall through to the static list */ }
+  const seen = new Set();
+  for (const p of Array.isArray(data) ? data : []) {
+    const token = platformToken(p.platformName);
+    if (token) seen.add(token);
+  }
+  if (seen.size) return [...seen].sort();
+  return (TUBE_DIRECTIONS_FALLBACK[lineId] || []).slice();
+}
+
+// Live trains for the preview: (status, rows). 'ok' | 'bad_station' | 'net'.
+//
+// TfL splits a bad code across two statuses — an unknown line is a 404, an
+// unknown station a 400 — and tube_api.cpp treats both as a config error, so
+// this reports them the same way.
+export async function tubeArrivals(lineId, station, direction = '') {
+  let data;
+  try {
+    data = await getJson(
+      `${TFL_API}/Line/${encodeURIComponent(lineId)}/Arrivals/${encodeURIComponent(station)}`);
+  } catch (e) {
+    return { status: (e.status === 404 || e.status === 400) ? 'bad_station' : 'net', rows: [] };
+  }
+  const seen = new Set();
+  const rows = [];
+  for (const p of Array.isArray(data) ? data : []) {
+    const token = platformToken(p.platformName);
+    if (!token) continue;
+    if (direction && token.toLowerCase() !== direction.toLowerCase()) continue;
+    if (p.vehicleId) {
+      if (seen.has(p.vehicleId)) continue;
+      seen.add(p.vehicleId);
+    }
+    rows.push({
+      line: tubeDirTag(token),
+      dest: tubeDestination(p),
+      mins: Math.max(0, Math.floor((p.timeToStation || 0) / 60)),
+    });
+  }
+  rows.sort((a, b) => a.mins - b.mins);
+  return { status: 'ok', rows };
+}
+
+// The row's route column is 52px — about four characters — so the direction is
+// abbreviated to three. Mirrors tube_api.cpp's dirTag().
+export function tubeDirTag(token) {
+  const t = String(token || '');
+  const compass = { northbound: 'N/B', southbound: 'S/B', eastbound: 'E/B', westbound: 'W/B' };
+  const hit = compass[t.toLowerCase()];
+  if (hit) return hit;
+  if (/^platform /i.test(t)) return 'P' + t.slice(9);
+  return t.slice(0, 3);
+}
+
+// Mirrors tube_api.cpp's destination rule: `towards` unless it is one of TfL's
+// placeholders, then destinationName, and when that is missing too (which is
+// exactly when `towards` says "Check Front of Train") the placeholder itself,
+// shortened — a blank column would tell the reader less than it does.
+export function tubeDestination(p) {
+  const towards = String(p.towards || '');
+  const placeholder = !towards
+    || /^check front of train$/i.test(towards)
+    || /^circle line$/i.test(towards);
+  if (!placeholder) return plain(towards);
+  const dest = plain(String(p.destinationName || '').replace(/ Underground Station$/, ''));
+  if (dest) return dest;
+  return /^check front of train$/i.test(towards) ? 'Check front' : plain(towards);
+}
+
 // --- trains -----------------------------------------------------------------
 
 // Best-effort online check of the CRS + key, mirroring installer.py's

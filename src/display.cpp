@@ -110,6 +110,7 @@ struct RowScroll {
 RowScroll s_rowScroll[MAX_DEPARTURES];
 RowScroll s_busScroll[MAX_BUS_ARRIVALS];
 RowScroll s_riverScroll[MAX_RIVER_ARRIVALS];
+RowScroll s_tubeScroll[MAX_TUBE_ARRIVALS];
 RowScroll s_wxScroll;          // the weather condition, if it overflows
 RowScroll s_headerScroll;
 
@@ -567,10 +568,21 @@ void renderRiverBoard(const std::vector<RiverArrival>& arrivals, const String& p
                       "No boats due", sinceFetchMs, errCount);
 }
 
+void renderTubeBoard(const std::vector<TubeArrival>& arrivals, const String& stationName,
+                     const String& lineName, uint32_t sinceFetchMs, int errCount) {
+    // "TUBE VICTORIA" rather than "UNDERGROUND": the tag is set in the small
+    // font beside a station name that needs every pixel it can keep.
+    String tag = lineName.length() ? ("TUBE " + lineName) : String("TUBE");
+    tag.toUpperCase();
+    drawArrivalsBoard(tag, stationName, arrivals, s_tubeScroll, MAX_TUBE_ARRIVALS,
+                      "No trains due", sinceFetchMs, errCount);
+}
+
 void resetScroll() {
     for (auto& r : s_rowScroll) { r.text = ""; r.offset = 0; }
     for (auto& r : s_busScroll) { r.text = ""; r.offset = 0; }
     for (auto& r : s_riverScroll) { r.text = ""; r.offset = 0; }
+    for (auto& r : s_tubeScroll) { r.text = ""; r.offset = 0; }
     s_wxScroll.text = "";
     s_wxScroll.offset = 0;
     s_headerScroll.text = "";

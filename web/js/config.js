@@ -11,10 +11,11 @@
 // them. See config.cpp's `stage_kv`.
 export const KEYS = [
   'ssid', 'pass', 'key', 'dep', 'dest', 'plat', 'tz',
-  'bus', 'busline', 'busprov', 'busid', 'buskey', 'busbudget', 'river', 'riverline', 'rivername', 'mode',
+  'bus', 'busline', 'busprov', 'busid', 'buskey', 'busbudget', 'river', 'riverline', 'rivername',
+  'tube', 'tubeline', 'tubedir', 'tubename', 'mode',
   'bstart', 'bend', 'bright', 'refr',
   'colfg', 'coldim', 'colwarn', 'colbg',
-  'dwtrain', 'dwbus', 'dwriver', 'dwclock', 'dwwx',
+  'dwtrain', 'dwbus', 'dwriver', 'dwtube', 'dwclock', 'dwwx',
   'wlat', 'wlon', 'wname', 'nmode',
 ];
 
@@ -24,6 +25,7 @@ export const SERVICES = [
   { id: 'train', label: 'Trains', note: 'UK-wide, National Rail' },
   { id: 'bus', label: 'Buses', note: 'London free; elsewhere needs a TransportAPI key' },
   { id: 'river', label: 'River boats', note: 'Uber Boat by Thames Clippers + Woolwich Ferry' },
+  { id: 'tube', label: 'London Underground', note: 'One line in one direction — no key needed' },
   { id: 'weather', label: 'Weather', note: 'For wherever you picked above — no extra setup' },
   { id: 'clock', label: 'Big clock', note: 'The time, filling the screen' },
 ];
@@ -99,6 +101,7 @@ export function defaultConfig() {
     ssid: '', pass: '', key: '', dep: '', dest: '', plat: '',
     tz: tz === 'Europe/London' ? 'GMT0BST,M3.5.0/1,M10.5.0' : '',
     bus: '', busline: '', river: '', riverline: '', rivername: '',
+    tube: '', tubeline: '', tubedir: '', tubename: '',
     // Which bus feed, and the credentials the national one needs. TfL is the
     // default because it is the one that needs no account at all.
     busprov: 'tfl', busid: '', buskey: '',
@@ -114,7 +117,7 @@ export function defaultConfig() {
     bright: 180, refr: 60,
     theme: 'amber',
     colours: { ...THEMES.amber },
-    dwtrain: 30, dwbus: 15, dwriver: 15, dwclock: 10, dwwx: 15,
+    dwtrain: 30, dwbus: 15, dwriver: 15, dwtube: 15, dwclock: 10, dwwx: 15,
     // Weather position is filled in from whichever stop the user picks, so it
     // is never asked for directly.
     wxLat: null, wxLon: null, wxName: '',
@@ -134,6 +137,9 @@ export function toDeviceConfig(ui) {
   const pruned = services.filter((s) => {
     if (s === 'bus') return !!ui.bus;
     if (s === 'river') return !!ui.river;
+    // All three, because the firmware's tube_enabled() wants all three: a
+    // station with no line or no direction is a screen with nothing behind it.
+    if (s === 'tube') return !!ui.tube && !!ui.tubeline && !!ui.tubedir;
     if (s === 'train') return !!ui.dep;
     // Weather needs somewhere to be the weather *for*, which comes from the
     // stop the user already chose rather than a question of its own.
@@ -163,6 +169,10 @@ export function toDeviceConfig(ui) {
     river: pruned.includes('river') ? ui.river : '',
     riverline: pruned.includes('river') ? (ui.riverline || '') : '',
     rivername: pruned.includes('river') ? (ui.rivername || '') : '',
+    tube: pruned.includes('tube') ? ui.tube : '',
+    tubeline: pruned.includes('tube') ? (ui.tubeline || '') : '',
+    tubedir: pruned.includes('tube') ? (ui.tubedir || '') : '',
+    tubename: pruned.includes('tube') ? (ui.tubename || '') : '',
     mode: buildMode(pruned),
     bstart: blanking ? ui.offHour : -1,
     bend: blanking ? ui.onHour : -1,
@@ -175,6 +185,7 @@ export function toDeviceConfig(ui) {
     dwtrain: ui.dwtrain,
     dwbus: ui.dwbus,
     dwriver: ui.dwriver,
+    dwtube: ui.dwtube,
     dwclock: ui.dwclock,
     dwwx: ui.dwwx,
     // Degrees x100000: NVS has no float type, and this keeps ~1m of precision.

@@ -334,6 +334,83 @@ There are 26 piers across the four lines. The installer fetches them live from
 
 ---
 
+## 3c. Data Source — London Underground (Unified API, optional)
+
+Used only when the user configures a Tube station. The same open
+[TfL Unified API](https://api.tfl.gov.uk/) the river screen uses, asked a
+narrower question: **one line, at one station, in one direction**.
+
+> **Why per line rather than per station.** The obvious endpoint is the river
+> client's `/StopPoint/{naptan}/Arrivals`, and it works — but measured against
+> real stations it answers with 24 KB at Oxford Circus, 34 KB at South
+> Kensington, 37 KB at Waterloo and **71 KB at King's Cross**, where six lines
+> and both directions all report at once. The CYD has no PSRAM and already
+> spends 153 KB of its ~200 KB of DRAM on the framebuffer, and §3's rail client
+> records that parsing straight off the TLS socket on that board fails about
+> five polls in six. Asking one line at a time caps the worst case at ~19 KB
+> (Piccadilly at King's Cross) — the same order as the bus feed's existing
+> budget, and safe to buffer whole. It also makes every row on a three- or
+> four-row screen one the reader can actually catch.
+
+| Item | Detail |
+|---|---|
+| **API** | TfL Unified API, `tube` mode |
+| **Endpoint** | `https://api.tfl.gov.uk/Line/{lineId}/Arrivals/{naptan}` |
+| **Protocol** | HTTPS. Standard JSON: an array of `Tfl.Api.Presentation.Entities.Prediction` objects — the same shape as §3b |
+| **Authentication** | **None**, as for the river feed |
+| **Data returned** | `platformName`, `towards`, `destinationName`, `stationName`, `timeToStation` (**seconds from now**), `vehicleId` |
+| **Coverage** | The eleven Underground lines. The Elizabeth line, Overground and DLR are different modes and are out of scope (§11) |
+| **Prediction horizon** | Open-ended; the firmware caps it at `TUBE_MAX_ETA_MINUTES` |
+| **Attribution** | "Data provided by Transport for London" |
+
+### 3c.1 Station and direction identifiers
+
+A station is a `940GZZLU…` Naptan (`NaptanMetroStation`) — 272 of them, fetched
+live from `/Line/{id}/StopPoints`. The same endpoint also returns platforms,
+entrances and access areas; only the station aggregates the whole stop.
+
+Direction is the awkward part. TfL's `direction` field ("inbound"/"outbound")
+looks like the right key and is not: **it is empty on the entire Circle line**,
+and on some records at Edgware Road. `platformName` is always present, in one of
+two shapes:
+
+| Shape | Example | Stored token |
+|---|---|---|
+| Compass word | `Northbound - Platform 3` | `Northbound` |
+| Platform only | `Platform 2` | `Platform 2` |
+
+The token is the part before the `" - "`, and it is what the firmware matches.
+Both front-ends sample the live feed to offer the tokens actually available at
+that station, because they vary: most of the network gives a compass word, but
+at Edgware Road the platform number is the only thing separating the directions.
+
+### 3c.2 Requirements
+
+| ID | Requirement |
+|---|---|
+| TUBE-01 | HTTPS enforced for the TfL endpoint; no HTTP fallback |
+| TUBE-02 | Arrivals are requested **per line**, not per station, so the worst-case response stays inside `TUBE_MAX_RESPONSE`. Measured: 71 KB station-wide at King's Cross versus 19 KB for its busiest single line |
+| TUBE-03 | Station, line and direction are all **required**. A partial config enables no Tube screen rather than an unusable one |
+| TUBE-04 | The direction filter matches the `platformName` token, never `direction` — the latter is empty for the whole Circle line |
+| TUBE-05 | `timeToStation` is used directly as the countdown, so the screen is correct even before NTP has synced |
+| TUBE-06 | Response parsed with an ArduinoJson **filter**, so only the six rendered fields are ever allocated |
+| TUBE-07 | The body is bulk-read into a buffer capped at `TUBE_MAX_RESPONSE`; a larger response is discarded rather than allowed to exhaust the heap |
+| TUBE-08 | HTTP/1.0 is requested so the server returns an unchunked body |
+| TUBE-09 | Predictions arrive unordered and are sorted soonest-first before display |
+| TUBE-10 | Trains further ahead than `TUBE_MAX_ETA_MINUTES` (20) are discarded. Tube headways are two to three minutes, so the rows always fill from the next quarter hour |
+| TUBE-11 | Duplicate predictions for one train (same `vehicleId`) are collapsed, so a duplicate cannot cost a real departure a row |
+| TUBE-12 | A bad code is a configuration error: logged once, retried only every 5 minutes, and the Tube screen withheld. **TfL splits this across two statuses** — an unknown line is `404` (`EntityNotFoundException`), an unknown station is `400` (`ApiArgumentException`) — and both are treated alike |
+| TUBE-13 | Zero trains is a valid result ("No trains due"), not a fetch failure |
+| TUBE-14 | The destination is `towards`, falling back to `destinationName` when `towards` is one of TfL's placeholders. When **both** are missing — which is exactly the case when `towards` is `"Check Front of Train"`, verified at Edgware Road — the placeholder is shown as `"Check front"`. A blank column would tell the reader less |
+| TUBE-15 | Line id and station Naptan are percent-encoded into the request path |
+| TUBE-16 | The direction token is matched case-insensitively |
+| TUBE-17 | TfL names a station only *inside* a prediction, so a platform with nothing due falls back to the friendly name the installer stored (`tubename`), as RIV-13 does for piers |
+| TUBE-18 | `RAW_TUBE_DEBUG` build flag dumps parsed trains for field verification |
+| TUBE-19 | Polling is no more frequent than `TUBE_REFRESH_SECONDS` (30 s), matching TfL's own cache |
+| TUBE-20 | A request carries a `User-Agent`. TfL answers a request without one with **HTTP 403** |
+
+---
+
 ## 4. Configuration (on-device)
 
 Settings are stored in NVS (namespace `esp32dep`) and set by the installer over
@@ -354,7 +431,7 @@ setup" having silently lost its WiFi, API key and station.
 | `dest` | No | — | Destination filter CRS (empty = all) |
 | `plat` | No | — | Platform filter (empty = all) |
 | `tz` | No | UK | POSIX timezone string; the installer sets it from the PC's locale |
-| `mode` | No | `train,bus` | Comma-separated set of services to show, e.g. `train,bus,river` |
+| `mode` | No | `train,bus` | Comma-separated set of services to show, e.g. `train,bus,river,tube`. The legacy `""`/`"both"` words still mean train+bus, and never enable a screen added since (`river`, `tube`) |
 | `bus` | No | - | TfL bus stop SMS code (empty = no bus screen at all) |
 | `busline` | No | - | Bus route filter, e.g. `38` (empty = every route at the stop) |
 | `busprov` | No | `tfl` | Which bus feed: `tfl` (keyless, London) or `national` (TransportAPI, UK-wide) |
@@ -364,6 +441,10 @@ setup" having silently lost its WiFi, API key and station.
 | `river` | No | - | TfL pier Naptan **port** ID, e.g. `930GCAW` (empty = no river screen at all) |
 | `riverline` | No | - | River route filter, e.g. `RB1` (empty = every route at the pier) |
 | `rivername` | No | - | Friendly pier name, stored by the installer so a pier with nothing due still shows a name |
+| `tube` | No | - | TfL Underground station Naptan, e.g. `940GZZLUKSX` (empty = no Tube screen). NVS key `tube` |
+| `tubeline` | No | - | TfL line id, e.g. `victoria`. **Required** with `tube` (TUBE-03). NVS key `tubeln` |
+| `tubedir` | No | - | Platform token, e.g. `Northbound` or `Platform 2`. **Required** with `tube` (TUBE-03/04). NVS key `tubedir` |
+| `tubename` | No | - | Friendly station name, as `rivername` is for a pier (TUBE-17). NVS key `tubenm` |
 | `bstart` | No | `-1` | Screen-blank start hour — when the screen goes OFF (−1 = never blank). The installer offers `22` on a new board |
 | `bend` | No | `-1` | Screen-blank end hour — when the screen comes back ON (−1 = never blank). The installer offers `6` on a new board |
 | `bright` | No | `180` | Backlight brightness (0–255) |
@@ -374,6 +455,7 @@ setup" having silently lost its WiFi, API key and station.
 | `dwtrain` | No | `-1` | Seconds the train screen holds (−1 = `TRAIN_SCREEN_SECONDS`) |
 | `dwbus` | No | `-1` | Seconds the bus screen holds |
 | `dwriver` | No | `-1` | Seconds the river screen holds |
+| `dwtube` | No | `-1` | Seconds the Tube screen holds |
 | `dwclock` | No | `-1` | Seconds the big-clock screen holds |
 | `dwwx` | No | `-1` | Seconds the weather screen holds |
 | `wlat` | No | unset | Weather latitude × 100000 (NVS has no float type) |
@@ -422,7 +504,8 @@ setup" having silently lost its WiFi, API key and station.
 | DISP-15 | A TfL screen is only entered once TfL has answered successfully for that stop or pier at least once; an unconfigured or rejected one simply never joins the rotation |
 | DISP-16 | Marquees reset on every screen change, so long names restart rather than resuming mid-scroll |
 | DISP-17 | The header shows the station/stop/pier name in the large font, with a small dim "TRAIN" / "BUS" / "RIVER" (or "BUS <route>" / "RIVER <route>") tag beside it |
-| DISP-18 | All three boards share one layout: a header row (mode tag + station/stop/pier name), three identical rows, then the clock. Buses and boats share the row renderer outright — a boat's "RB1" sits where a bus's "38" does — and differ only in tag and empty-state text |
+| DISP-18 | All four boards share one layout: a header row (mode tag + station/stop/pier name), three identical rows, then the clock. Buses, boats and Tube trains share the row renderer outright — a boat's "RB1" and a train's "N/B" sit where a bus's "38" does — and differ only in tag and empty-state text |
+| DISP-19 | On the Tube board the line is named once in the header tag ("TUBE VICTORIA"), so the row's route column carries the **direction** instead. It is abbreviated to three characters — `N/B`, `S/B`, `E/B`, `W/B`, or `P2` where TfL gives only a platform number — because that column is 52 px, about four characters of the row font |
 | DISP-19 | All three rows use the same font; times and statuses use the smaller font, vertically centred, so the destination column gets the width |
 | DISP-20 | A board with no train screen and no TfL answer yet shows a "Loading arrivals..." splash, not an empty departure board for a station that was never configured |
 | DISP-21 | The river screen shows up to 3 sailings — expected time, route ("RB1"), destination pier, right-aligned countdown — and its countdowns tick down live between polls exactly as the bus screen's do |
@@ -448,7 +531,7 @@ Newline-terminated line protocol on the USB CDC serial port (`src/config.cpp`).
 | PROV-01 | `PING` → `PONG Departure Buddy` (discovery/handshake). The installer matches the bare `PONG` token, never the product name after it, so the banner is informational — a rename does not stop a new installer recognising an old board, or an old installer a new one |
 | PROV-02 | `CFG <key>=<value>` → `ACK <key>` (stages a value) |
 | PROV-03 | `COMMIT` → `SAVED`, then the device saves to NVS and reboots |
-| PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `busprov`, `busid`, `buskeylen`, `busbudget`, `busevery`, `river`, `riverline`, `rivername`, `mode`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
+| PROV-04 | `GET` → current config as `key=value` lines, then `END`. Reports `dep`, `dest`, `plat`, `bus`, `busline`, `busprov`, `busid`, `buskeylen`, `busbudget`, `busevery`, `river`, `riverline`, `rivername`, `tube`, `tubeline`, `tubedir`, `tubename`, `mode`, `ssid`, `passlen`, `bstart`, `bend`, `bright`, `refr`, `wifi`, `prov` |
 | PROV-05 | Protocol available whether provisioned or not, so reconfiguration always works |
 | PROV-06 | Host opens serial with `dtr=True, rts=False` to avoid resetting the ESP32-S3 |
 | PROV-07 | `GET` never returns a secret: the rail API key is not reported at all, the WiFi password only as `passlen` and the TransportAPI `app_key` only as `buskeylen` — a length distinguishes an empty or truncated credential from a wrong one. The `app_id` *is* reported: it grants nothing alone, and it identifies which account a board is spending the quota of |
@@ -624,8 +707,9 @@ pin) and `BUTTON_2` (GPIO14).
 ## 11. Out of Scope
 
 - Journey planning, ticket purchasing, arrivals boards
-- Buses outside London (the TfL feed is London-only)
 - More than one bus stop, or TfL's streaming interface (which needs authentication)
+- More than one Tube line, station or direction at a time (see §3c: a station-wide query is up to 71 KB and a screen holds three or four trains)
+- TfL modes other than bus, river bus and Tube — the Elizabeth line, Overground, DLR and trams
 - 5 GHz WiFi (unsupported by the ESP32-S3 radio)
 - macOS / Linux installer builds (firmware is cross-platform buildable; the packaged installer targets Windows)
 - OTA firmware updates (re-flash via the installer)

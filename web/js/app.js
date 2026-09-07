@@ -11,6 +11,8 @@ const ui = cfg.defaultConfig();
 
 let previewScreen = 'train';
 let pierList = [];
+let tubeLineList = [];
+let tubeStationList = [];
 
 // ─────────────────────────────── basics ──────────────────────────────────
 function initHours() {
@@ -100,6 +102,7 @@ function syncServiceVisibility() {
       .classList.toggle('on', on);
   }
   if (ui.services.includes('river') && !pierList.length) loadPiers();
+  if (ui.services.includes('tube') && !tubeLineList.length) loadTubeLines();
   buildDwellSliders();
   buildPreviewTabs();
 }
@@ -381,6 +384,98 @@ async function loadPiers() {
   $('riverline').oninput = () => { ui.riverline = $('riverline').value.trim().toUpperCase(); render(); };
 }
 
+// ──────────────────────────────── tube ───────────────────────────────────
+// Three chained pickers, because the firmware needs all three: the line says
+// which page of the feed to ask for, and the station and direction are what
+// keep the answer small enough to hold and short enough to read.
+
+async function loadTubeLines() {
+  const sel = $('tubeLineSelect');
+  try {
+    tubeLineList = await api.tubeLines();
+  } catch {
+    $('tubeChosen').hidden = false;
+    $('tubeChosen').textContent = 'Could not reach TfL just now — try again in a moment.';
+    return;
+  }
+  sel.innerHTML = '<option value="">Choose a line…</option>';
+  for (const l of tubeLineList) sel.append(new Option(l.name, l.id));
+  sel.value = ui.tubeline || '';
+  sel.onchange = () => { ui.tubeline = sel.value; loadTubeStations(); };
+  if (ui.tubeline) loadTubeStations();
+}
+
+async function loadTubeStations() {
+  const sel = $('tubeStationSelect');
+  const dirSel = $('tubeDirSelect');
+  // Changing the line invalidates both of the answers below it.
+  ui.tube = ui.tubename = ui.tubedir = '';
+  dirSel.innerHTML = '<option value="">Choose a direction…</option>';
+  dirSel.disabled = true;
+  $('tubeChosen').hidden = true;
+  sel.disabled = true;
+  sel.innerHTML = '<option value="">Loading stations…</option>';
+  render();
+
+  if (!ui.tubeline) { sel.innerHTML = '<option value="">Choose a line first…</option>'; return; }
+  try {
+    tubeStationList = await api.tubeStations(ui.tubeline);
+  } catch {
+    sel.innerHTML = '<option value="">Could not reach TfL — try again</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Choose a station…</option>';
+  for (const s of tubeStationList) sel.append(new Option(s.name, s.id));
+  sel.disabled = false;
+  sel.onchange = () => {
+    const s = tubeStationList.find((x) => x.id === sel.value);
+    ui.tube = s ? s.id : '';
+    ui.tubename = s ? s.name : '';
+    if (s && s.lat != null && s.lon != null) setWeatherFrom(s.lat, s.lon, s.name);
+    loadTubeDirections();
+  };
+}
+
+async function loadTubeDirections() {
+  const sel = $('tubeDirSelect');
+  ui.tubedir = '';
+  $('tubeChosen').hidden = true;
+  sel.disabled = true;
+  sel.innerHTML = '<option value="">Loading directions…</option>';
+  render();
+
+  if (!ui.tube) { sel.innerHTML = '<option value="">Choose a station first…</option>'; return; }
+  // Sampled from the live feed, because the directions on offer vary by
+  // station: mostly a compass word, but at Edgware Road only a platform number.
+  const dirs = await api.tubeDirections(ui.tubeline, ui.tube);
+  sel.innerHTML = '<option value="">Choose a direction…</option>';
+  for (const d of dirs) sel.append(new Option(d, d));
+  sel.disabled = false;
+  if (dirs.length === 1) { sel.value = dirs[0]; ui.tubedir = dirs[0]; }
+  sel.onchange = () => { ui.tubedir = sel.value; previewTube(); };
+  previewTube();
+}
+
+async function previewTube() {
+  const el = $('tubeChosen');
+  render();
+  if (!ui.tube || !ui.tubeline || !ui.tubedir) return;
+  const label = `${ui.tubename} — ${api.tubeLineLabel(ui.tubeline)}, ${ui.tubedir}`;
+  el.hidden = false;
+  el.textContent = `Showing ${label}. Checking what’s running…`;
+  const { status, rows } = await api.tubeArrivals(ui.tubeline, ui.tube, ui.tubedir);
+  el.textContent = status === 'bad_station'
+    ? `TfL does not recognise that line and station together — pick another.`
+    : status !== 'ok'
+      ? `Showing ${label}.`
+      : rows.length
+        ? `Showing ${label}. Next: `
+          + rows.slice(0, 3).map((r) => `${r.dest} ${r.mins < 1 ? 'due' : r.mins + ' min'}`).join(', ')
+        : `Showing ${label} — nothing due right now, but the platform is valid.`;
+  ui.tubePreview = rows.slice(0, 3);
+  render();
+}
+
 // The weather location is never asked for: it comes from whatever stop, station
 // or pier was chosen. The first pick wins, so switching a bus stop later does
 // not silently move the weather away from the station someone set up first.
@@ -436,7 +531,7 @@ function syncColourInputs() {
 function buildDwellSliders() {
   const wrap = $('dwells');
   wrap.innerHTML = '';
-  const keys = { train: 'dwtrain', bus: 'dwbus', river: 'dwriver',
+  const keys = { train: 'dwtrain', bus: 'dwbus', river: 'dwriver', tube: 'dwtube',
                  weather: 'dwwx', clock: 'dwclock' };
   const shown = cfg.SERVICES.filter((s) => ui.services.includes(s.id));
   $('dwellWrap').hidden = shown.length < 2;   // nothing rotates with one screen
@@ -504,6 +599,13 @@ function render() {
     name = ui.rivername || 'Your pier';
     rows = (ui.riverPreview || []).map((r) => ({ a: clock(r.mins), b: r.line, c: r.dest, d: r.mins < 1 ? 'Due' : r.mins + ' min' }));
     if (!rows.length) empty = 'No boats due';
+  } else if (previewScreen === 'tube') {
+    // The line rides in the tag and the direction in each row, which is the one
+    // way this board differs from the bus and river ones it shares a shape with.
+    tag = ui.tubeline ? `TUBE ${api.tubeLineLabel(ui.tubeline).toUpperCase()}` : 'TUBE';
+    name = ui.tubename || 'Your station';
+    rows = (ui.tubePreview || []).map((r) => ({ a: clock(r.mins), b: r.line, c: r.dest, d: r.mins < 1 ? 'Due' : r.mins + ' min' }));
+    if (!rows.length) empty = 'No trains due';
   } else {
     rows = [
       { a: clock(5), c: 'London Waterloo', d: 'On time', p: '1' },
@@ -559,6 +661,10 @@ function problems() {
   if (ui.services.includes('bus') && national() && !(ui.busid && ui.buskey))
     out.push('Your TransportAPI app_id and app_key, for buses outside London.');
   if (ui.services.includes('river') && !ui.river) out.push('A pier, or turn river boats off.');
+  // All three, because the board needs all three to draw the screen at all.
+  if (ui.services.includes('tube') && !ui.tubeline) out.push('An Underground line, or turn the Tube off.');
+  if (ui.services.includes('tube') && ui.tubeline && !ui.tube) out.push('An Underground station, or turn the Tube off.');
+  if (ui.services.includes('tube') && ui.tube && !ui.tubedir) out.push('Which direction at that Tube station.');
   if (ui.services.includes('weather') && ui.wxLat === null) {
     out.push('Somewhere to show the weather for — pick a station, stop or pier above.');
   }

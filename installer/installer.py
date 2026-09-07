@@ -39,10 +39,11 @@ ESPRESSIF_VID = 0x303A
 CONFIG_KEYS = (
     "ssid", "pass", "key", "dep", "dest", "plat", "tz",
     "bus", "busline", "busprov", "busid", "buskey", "busbudget",
-    "river", "riverline", "rivername", "mode",
+    "river", "riverline", "rivername",
+    "tube", "tubeline", "tubedir", "tubename", "mode",
     "bstart", "bend", "bright", "refr",
     "colfg", "coldim", "colwarn", "colbg",
-    "dwtrain", "dwbus", "dwriver", "dwclock", "dwwx",
+    "dwtrain", "dwbus", "dwriver", "dwtube", "dwclock", "dwwx",
     "wlat", "wlon", "wname", "nmode",
 )
 
@@ -867,6 +868,258 @@ def river_wizard(defaults, required=False):
 
 
 # --------------------------------------------------------------------------- #
+# London Underground (TfL Unified API)
+#
+# The same open feed as the river bus, asked one line at a time. All three of
+# line, station and direction end up on the device, because tube_api.cpp needs
+# all three to keep a response small enough to hold and short enough to read.
+# Mirrors web/js/api.js's tube section (WEB-06).
+# --------------------------------------------------------------------------- #
+
+# Fallback directions per line, used when the live sample below comes back
+# empty - engineering hours, a suspended line, or simply the small hours.
+# Without it the wizard would dead-end on a station that is fine by morning.
+# Mirrored in web/js/api.js as TUBE_DIRECTIONS_FALLBACK.
+TUBE_DIRECTIONS_FALLBACK = {
+    "bakerloo": ["Northbound", "Southbound"],
+    "central": ["Eastbound", "Westbound"],
+    "circle": ["Eastbound", "Westbound"],
+    "district": ["Eastbound", "Westbound"],
+    "hammersmith-city": ["Eastbound", "Westbound"],
+    "jubilee": ["Northbound", "Southbound"],
+    "metropolitan": ["Northbound", "Southbound"],
+    "northern": ["Northbound", "Southbound"],
+    "piccadilly": ["Eastbound", "Westbound"],
+    "victoria": ["Northbound", "Southbound"],
+    "waterloo-city": ["Eastbound", "Westbound"],
+}
+
+# Used only when TfL cannot be reached at all during setup.
+TUBE_LINES_FALLBACK = [
+    ("bakerloo", "Bakerloo"), ("central", "Central"), ("circle", "Circle"),
+    ("district", "District"), ("hammersmith-city", "Hammersmith & City"),
+    ("jubilee", "Jubilee"), ("metropolitan", "Metropolitan"),
+    ("northern", "Northern"), ("piccadilly", "Piccadilly"),
+    ("victoria", "Victoria"), ("waterloo-city", "Waterloo & City"),
+]
+
+
+def tube_line_label(line_id):
+    """The screen's label for a line id. Mirrors tube_api.cpp's lineLabel().
+
+    Only the two ampersanded names need shrinking; the header sets this beside a
+    station name that needs the room."""
+    if line_id == "hammersmith-city":
+        return "H&C"
+    if line_id == "waterloo-city":
+        return "W&C"
+    return " ".join(w.capitalize() for w in line_id.split("-"))
+
+
+def tube_platform_token(platform_name):
+    """The part of a platformName before the ' - '.
+
+    TfL gives either "Northbound - Platform 3" or a bare "Platform 2"; the head
+    is what the firmware matches on. Mirrors tube_api.cpp's platformToken()."""
+    s = str(platform_name or "")
+    head = s.split(" - ")[0] if " - " in s else s
+    return head.strip()
+
+
+def tube_lines():
+    """The Underground lines, as [(id, name)], live from TfL where possible."""
+    data = _tfl_json("/Line/Mode/tube")
+    if not data:
+        return list(TUBE_LINES_FALLBACK)
+    out = [(l["id"], _plain(l.get("name", l["id"]))) for l in data if l.get("id")]
+    return sorted(out, key=lambda x: x[1])
+
+
+def tube_stations(line_id):
+    """Every station on one line, as [(naptan, name)].
+
+    Filtered to NaptanMetroStation: the same endpoint also returns platforms,
+    entrances and access areas, and only the station aggregates the whole stop
+    the way the board wants."""
+    data = _tfl_json("/Line/%s/StopPoints" % line_id)
+    if not data:
+        return []
+    out = []
+    for sp in data:
+        if sp.get("stopType") != "NaptanMetroStation" or not sp.get("id"):
+            continue
+        name = _plain(sp.get("commonName", sp["id"]))
+        if name.endswith(" Underground Station"):
+            name = name[: -len(" Underground Station")]
+        out.append((sp["id"], name))
+    return sorted(out, key=lambda x: x[1])
+
+
+def tube_directions(line_id, station):
+    """Directions available for one line at one station, soonest data first.
+
+    Sampled live because they vary by station: most of the network gives a
+    compass word, but at Edgware Road TfL gives none and the only thing
+    separating the two directions is the platform number."""
+    data = _tfl_json("/Line/%s/Arrivals/%s" % (line_id, station))
+    seen = set()
+    for p in data if isinstance(data, list) else []:
+        token = tube_platform_token(p.get("platformName"))
+        if token:
+            seen.add(token)
+    if seen:
+        return sorted(seen)
+    return list(TUBE_DIRECTIONS_FALLBACK.get(line_id, []))
+
+
+def tube_arrivals(line_id, station, direction=""):
+    """Live trains. Returns (status, [(dirtag, destination, mins), ...]).
+
+    Status is 'ok' | 'bad_station' | 'net'. TfL splits a bad code across two
+    statuses - an unknown line is a 404, an unknown station a 400 - and
+    tube_api.cpp treats both as a config error, so this reports them alike."""
+    import urllib.request
+    import urllib.error
+    req = urllib.request.Request(
+        "%s/Line/%s/Arrivals/%s" % (TFL_API, line_id, station),
+        headers={"User-Agent": "DepartureBuddy-installer"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:
+        return ("bad_station" if e.code in (400, 404) else "net"), []
+    except Exception:
+        return "net", []
+    out, seen = [], set()
+    for p in data if isinstance(data, list) else []:
+        token = tube_platform_token(p.get("platformName"))
+        if not token:
+            continue
+        if direction and token.lower() != direction.lower():
+            continue
+        vid = p.get("vehicleId")
+        if vid:
+            if vid in seen:
+                continue
+            seen.add(vid)
+        out.append((tube_dir_tag(token), tube_destination(p),
+                    max(0, int(p.get("timeToStation") or 0) // 60)))
+    out.sort(key=lambda r: r[2])
+    return "ok", out
+
+
+def tube_dir_tag(token):
+    """The direction, shrunk to fit the row's 52px route column (about four
+    characters). Mirrors tube_api.cpp's dirTag()."""
+    compass = {"northbound": "N/B", "southbound": "S/B",
+               "eastbound": "E/B", "westbound": "W/B"}
+    hit = compass.get(token.lower())
+    if hit:
+        return hit
+    if token.lower().startswith("platform "):
+        return "P" + token[9:]
+    return token[:3]
+
+
+def tube_destination(p):
+    """Mirrors tube_api.cpp's destination rule: `towards` unless it is one of
+    TfL's placeholders, then destinationName, and when that is missing too -
+    which is exactly when `towards` says "Check Front of Train" - the
+    placeholder itself, shortened. A blank column would say less."""
+    towards = str(p.get("towards") or "")
+    low = towards.lower()
+    placeholder = (not towards or low == "check front of train"
+                   or low == "circle line")
+    if not placeholder:
+        return _plain(towards)
+    dest = _plain(str(p.get("destinationName") or ""))
+    if dest.endswith(" Underground Station"):
+        dest = dest[: -len(" Underground Station")]
+    if dest:
+        return dest
+    return "Check front" if low == "check front of train" else _plain(towards)
+
+
+def choose_from(items, what, current="", skippable=False):
+    """Numbered picker over [(id, label)]. Returns (id, label) or ('', '')."""
+    print("\n  %s (%d):" % (what, len(items)))
+    for i, (iid, label) in enumerate(items):
+        mark = "  <- current" if iid == current else ""
+        print("    [%2d] %s%s" % (i, label, mark))
+    if skippable:
+        print("    [ s] Skip - don't show this screen after all")
+    default = ""
+    for i, (iid, _) in enumerate(items):
+        if iid == current:
+            default = str(i)
+    while True:
+        d = " [%s]" % default if default else ""
+        sel = (input("  Choose%s: " % d).strip() or default).lower()
+        if skippable and sel == "s":
+            return "", ""
+        if sel.isdigit() and int(sel) < len(items):
+            return items[int(sel)]
+        print("  ! pick a number from the list"
+              + (", or 's' to skip" if skippable else ""))
+
+
+def tube_wizard(defaults, required=False):
+    """Underground section. Returns (station, line, direction, station_name).
+
+    The Tube was already chosen in Part 2, so this asks *which* line, station
+    and direction, never whether to have one. All three are required because the
+    firmware needs all three; skipping any of them drops the screen."""
+    print("\nYour Underground station")
+    if required:
+        print("  The board will show live trains from one platform.")
+    else:
+        print("  Live Underground arrivals from TfL's open data - no extra key")
+        print("  needed. Enter 's' at the line list to drop the Tube screen.")
+    print("  One line in one direction: a station like King's Cross has six")
+    print("  lines running both ways, and the screen holds a few trains.")
+
+    print("\n  Fetching the lines from TfL...")
+    line, line_name = choose_from(tube_lines(), "Underground lines",
+                                  defaults.get("tubeline", ""),
+                                  skippable=not required)
+    if not line:
+        return "", "", "", ""
+
+    print("\n  Fetching the stations on the %s line..." % line_name)
+    stations = tube_stations(line)
+    if not stations:
+        print("  ! Couldn't reach TfL for the station list. Skipping the Tube screen.")
+        return "", "", "", ""
+    station, station_name = choose_from(
+        stations, "Stations on the %s line" % line_name, defaults.get("tube", ""))
+
+    print("\n  Checking which directions run from %s..." % station_name)
+    dirs = tube_directions(line, station)
+    if not dirs:
+        print("  ! No directions found for that station. Skipping the Tube screen.")
+        return "", "", "", ""
+    direction, _ = choose_from([(d, d) for d in dirs],
+                               "Directions at %s" % station_name,
+                               defaults.get("tubedir", ""))
+
+    status, trains = tube_arrivals(line, station, direction)
+    if status == "bad_station":
+        print("  ! TfL doesn't recognise the %s line at '%s'." % (line_name, station))
+    elif status == "ok":
+        if trains:
+            print("  Next trains from %s (%s, %s) right now:"
+                  % (station_name, tube_line_label(line), direction))
+            for tag, dest, mins in trains[:3]:
+                when = "Due" if mins < 1 else "%d min" % mins
+                print("    %4s  %-32s %s" % (tag, dest, when))
+        else:
+            print("  (nothing due right now - the platform is valid)")
+    else:
+        print("  (couldn't check trains online - accepting the choice as made)")
+    return station, line, direction, station_name
+
+
+# --------------------------------------------------------------------------- #
 # Serial helpers
 # --------------------------------------------------------------------------- #
 def list_candidate_ports():
@@ -1045,6 +1298,7 @@ SERVICES = [
     ("train", "Trains", "UK-wide, National Rail"),
     ("bus", "Buses", "London free; elsewhere needs a TransportAPI key"),
     ("river", "River boats", "Uber Boat by Thames Clippers + Woolwich Ferry"),
+    ("tube", "Underground", "One line in one direction - no key needed"),
 ]
 
 
@@ -1211,10 +1465,16 @@ def wizard(defaults=None, on_board=False):
         cfg["river"], cfg["riverline"], cfg["rivername"] = river_wizard(
             d, required=(services == ["river"]))
 
-    # A service chosen in Part 2 but then left without a stop or pier would put
-    # a screen in the rotation with nothing behind it, so drop it from the set
-    # rather than storing a mode the board cannot honour.
-    for name, key in (("bus", "bus"), ("river", "river")):
+    if "tube" not in services:
+        cfg["tube"] = cfg["tubeline"] = cfg["tubedir"] = cfg["tubename"] = None
+    else:
+        (cfg["tube"], cfg["tubeline"], cfg["tubedir"],
+         cfg["tubename"]) = tube_wizard(d, required=(services == ["tube"]))
+
+    # A service chosen in Part 2 but then left without a stop, pier or station
+    # would put a screen in the rotation with nothing behind it, so drop it from
+    # the set rather than storing a mode the board cannot honour.
+    for name, key in (("bus", "bus"), ("river", "river"), ("tube", "tube")):
         if name in services and cfg.get(key) == "":
             services.remove(name)
             print(f"  ({name} screen left off - nothing was selected)")
@@ -1248,6 +1508,10 @@ def summary(cfg):
         route = f" (route {cfg['riverline']} only)" if cfg.get("riverline") else ""
         pier = cfg.get("rivername") or cfg["river"]
         print(f"    Pier        {pier}{route}")
+    if "tube" in services and cfg.get("tube"):
+        station = cfg.get("tubename") or cfg["tube"]
+        print(f"    Tube        {station} - {tube_line_label(cfg['tubeline'])}, "
+              f"{cfg['tubedir']}")
     if cfg["bstart"] != -1 and cfg["bend"] != -1:
         print(f"    Screen on   {cfg['bend']:02d}:00 - {cfg['bstart']:02d}:00")
     else:

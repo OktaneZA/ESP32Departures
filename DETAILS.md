@@ -75,6 +75,7 @@ into `installer/firmware/` and run `installer/build_exe.py`.
 | PIL dot-matrix TTF fonts                | dot-matrix clock via `docs/ttf_to_lgfx.py` (rows use FreeSans) |
 | (no bus support)                        | optional TfL bus screen (`bus_api.cpp`), cycled from `loop()` |
 | (no river support)                      | optional TfL river screen (`river_api.cpp`), same rotation |
+| (no Underground support)                | optional TfL Tube screen (`tube_api.cpp`), same rotation |
 
 ## Project layout
 
@@ -86,13 +87,14 @@ ESP32Departures/
 │   ├── app_config.h          compile-time tunables
 │   ├── config.h              on-device (NVS) runtime config
 │   ├── dotmatrix_fonts.h     generated dot-matrix font (clock)
-│   ├── model.h / rail_api.h / bus_api.h / river_api.h / display.h
+│   ├── model.h / rail_api.h / bus_api.h / river_api.h / tube_api.h / display.h
 ├── src/
 │   ├── main.cpp              WiFi, NTP, fetch task, render loop
 │   ├── config.cpp            NVS config + USB-serial provisioning
 │   ├── rail_api.cpp          National Rail LDBWS REST/JSON client
 │   ├── bus_api.cpp           TfL live bus arrivals (Countdown/URA) client
 │   ├── river_api.cpp         TfL live river sailings (Unified API) client
+│   ├── tube_api.cpp          TfL live Underground arrivals (Unified API) client
 │   └── display.cpp           LovyanGFX panel config + rendering
 ├── docs/                     board mockups, API-key guide, font-conversion script
 ├── web/                      the web configurator (static, hosted on Azure)
@@ -145,6 +147,20 @@ ESP32Departures/
   already relative, so the countdown is right even before NTP has synced.
   RB2 (Tate to Tate) is not published on this feed. Screen timing is
   `RIVER_SCREEN_SECONDS`. Data provided by Transport for London.
+- **Underground trains** come from the same Unified API, asked per line
+  (`https://api.tfl.gov.uk/Line/{line}/Arrivals/{station}`) rather than per
+  station. That is a memory decision: a station-wide query answers with 71 KB at
+  King's Cross, where six lines report at once, and the CYD has no PSRAM to hold
+  it — one line at a time caps the worst case near 19 KB. It is also a legibility
+  one, since the screen holds three or four trains. So a Tube screen is one line,
+  one station and one direction, all three required.
+  The direction filter matches TfL's `platformName` ("Northbound - Platform 3"),
+  not its `direction` field, which is empty for the whole Circle line. Because
+  the line is already named in the header, each row's route column carries the
+  direction instead, abbreviated to fit: `N/B`, `S/B`, or `P2` at a station like
+  Edgware Road where TfL gives only a platform number. Screen timing is
+  `TUBE_SCREEN_SECONDS`, and `RAW_TUBE_DEBUG` prints the parsed trains.
+  Data provided by Transport for London.
 - **The web configurator needs no backend.** Every API it uses is CORS-open, so
   it is plain static hosting: TfL Unified and Countdown send
   `Access-Control-Allow-Origin: *`, postcodes.io the same, and Rail Data

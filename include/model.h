@@ -29,6 +29,13 @@ struct BusArrival {
 // `etaSeconds` means the same thing here as it does for buses.
 using RiverArrival = BusArrival;
 
+// A Tube train is the same three fields again, with one substitution: the line
+// is already named in the screen's header (a Tube screen is one line at one
+// station), so the row's route slot carries the direction instead — "N/B",
+// "S/B", or a platform number where TfL gives no compass word. See dirTag() in
+// tube_api.cpp for why it has to be that short.
+using TubeArrival = BusArrival;
+
 // Current conditions for the weather screen, already formatted for display.
 // Temperatures are whole degrees because the row font is wide and a tenth of a
 // degree is noise at a glance; the "feels like" is the one people actually act
