@@ -633,6 +633,8 @@ flashing requires: Web Serial only works in a secure context.
 | WEB-10 | Web Serial is feature-detected. Where it is missing (Firefox, Safari, mobile) the page falls back to the downloadable settings file and says so plainly |
 | WEB-11 | After `COMMIT` the board reboots and, being native USB CDC, its port re-enumerates as a new device — invalidating the held handle. The page waits for reconnection and degrades to a plain success message rather than reporting a failure |
 | WEB-12 | A downloaded settings file contains the WiFi password in plain text. The page says so where the download is offered; this is the documented exception to SEC-05 |
+| WEB-13 | Firmware images are handed to esptool-js as **bytes** (`Uint8Array`), never as a binary string. esptool-js 0.6 passes image data straight to pako, which UTF-8-encodes a string: every byte at or above `0x80` became two. The bootloader, partition table and `boot_app0` each fit in one block and were written silently corrupt; the stub then rejected `firmware.bin` partway (`seq 39 failed with status 201`, `ESP_TOO_MUCH_DATA`). The board was left looping on `invalid header` with no bootloader. Every web flash failed this way from the flasher's first commit until the fix. A board in that state is recoverable, since the ROM cannot be overwritten |
+| WEB-14 | Flash progress weights each image's own fraction by its size. esptool-js reports progress in compressed bytes against each file's compressed total, so dividing by the uncompressed total made a successful S3 flash appear to stop near 63% |
 
 ---
 

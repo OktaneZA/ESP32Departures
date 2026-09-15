@@ -60,17 +60,6 @@ async function sha256Hex(buf) {
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// esptool-js takes each image as a binary *string*, not an ArrayBuffer.
-function toBinaryString(buf) {
-  const bytes = new Uint8Array(buf);
-  let s = '';
-  // Chunked to stay well clear of the argument-count limit on large images.
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  }
-  return s;
-}
-
 // Fetch every image and verify it against the manifest before writing a single
 // byte. A truncated download that bricked the board would be far worse than a
 // refusal, and the check is cheap.
@@ -87,7 +76,13 @@ export async function fetchImages(board, onProgress) {
         throw new Error(`${part.path} failed its integrity check — refusing to flash.`);
       }
     }
-    parts.push({ data: toBinaryString(buf), address: Number(part.offset) });
+    // Bytes, not a binary string. esptool-js 0.6 takes a Uint8Array and hands it
+    // straight to pako, and pako UTF-8-encodes any string it is given, so every
+    // byte at or above 0x80 became two. The small images were written corrupt
+    // without complaint, since each fits in one block, and the stub rejected
+    // firmware.bin partway ("seq 39 failed with status 201", ESP_TOO_MUCH_DATA).
+    // That left a board with a broken bootloader and nothing it could run.
+    parts.push({ data: new Uint8Array(buf), address: Number(part.offset) });
   }
   return parts;
 }
@@ -151,8 +146,13 @@ export async function flash(port, parts, onStatus, onProgress, expectChip, flash
       throw e;
     }
 
-    const total = parts.reduce((n, p) => n + p.data.length, 0);
-    const written = new Array(parts.length).fill(0);
+    // esptool-js reports each file's progress in *compressed* bytes, against
+    // that file's own compressed total. Dividing by the images' uncompressed
+    // size left the bar stopping near 63% on a flash that had worked, so each
+    // file's own fraction is weighted by its size instead.
+    const sizes = parts.map((p) => p.data.length);
+    const total = sizes.reduce((a, b) => a + b, 0);
+    const done = new Array(parts.length).fill(0);
 
     await loader.writeFlash({
       fileArray: parts,
@@ -161,9 +161,9 @@ export async function flash(port, parts, onStatus, onProgress, expectChip, flash
       flashFreq: FLASH_FREQ,
       eraseAll: false,
       compress: true,
-      reportProgress: (fileIndex, w) => {
-        written[fileIndex] = w;
-        onProgress?.(written.reduce((a, b) => a + b, 0) / total);
+      reportProgress: (fileIndex, written, fileTotal) => {
+        done[fileIndex] = fileTotal ? written / fileTotal : 1;
+        onProgress?.(done.reduce((sum, f, i) => sum + f * sizes[i], 0) / total);
       },
     });
     onStatus?.('Written. Restarting the board…');
