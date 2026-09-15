@@ -31,6 +31,9 @@ PyInstaller.__main__.run([
     "--specpath", HERE,
     # Bundle the four firmware binaries (Windows uses ';' as the data separator).
     "--add-data", os.path.join(HERE, "firmware") + ";firmware",
+    # The swept Tube direction table the wizard offers from. It lives in
+    # web/data so the setup page and the exe read the same file.
+    "--add-data", os.path.join(HERE, "..", "web", "data", "tube-directions.json") + ";data",
     # esptool ships stub-flasher data + submodules that must be collected.
     "--collect-all", "esptool",
     "--collect-submodules", "serial",

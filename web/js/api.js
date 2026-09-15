@@ -449,10 +449,9 @@ export function platformToken(platformName) {
   return (i < 0 ? s : s.slice(0, i)).trim();
 }
 
-// Fallback directions per line, for when the live sample below comes back
-// empty — engineering hours, a suspended line, or simply the small hours.
-// Without this the wizard would dead-end on a station that is perfectly fine
-// by morning. Mirrored in installer.py as TUBE_DIRECTIONS_FALLBACK.
+// The last resort: each line's usual pair, for a station missing from the swept
+// table with nothing due right now. It is wrong at dozens of stations, which is
+// why it is the last resort. Mirrored in installer.py as TUBE_DIRECTIONS_FALLBACK.
 const TUBE_DIRECTIONS_FALLBACK = {
   bakerloo: ['Northbound', 'Southbound'],
   central: ['Eastbound', 'Westbound'],
@@ -467,23 +466,58 @@ const TUBE_DIRECTIONS_FALLBACK = {
   'waterloo-city': ['Eastbound', 'Westbound'],
 };
 
-// The directions actually available for one line at one station, sampled from
-// the live feed because they vary by station: most of the District line is
-// Eastbound/Westbound, but at Edgware Road TfL gives no compass word at all and
-// the only thing separating the two directions is the platform number.
+// Which direction names each station uses, swept from the whole network by
+// web/build-tube-directions.py. Loaded once, like stations.json.
+let _tubeDirections = null;
+async function sweptTubeDirections() {
+  if (!_tubeDirections) {
+    try {
+      _tubeDirections = (await getJson('data/tube-directions.json')).lines || {};
+    } catch {
+      _tubeDirections = {};   // no table published: the live sample still works
+    }
+  }
+  return _tubeDirections;
+}
+
+// The directions to offer for one line at one station, each with how many
+// trains are due on it right now: [{ name, due }].
+//
+// Neither source works alone. The live feed only names a direction while a train
+// is due on it, so sampling it as someone picked a station made directions come
+// and go (#8). And a fixed pair per line is wrong at dozens of stations: Inner
+// and Outer Rail on the Hainault loop, Eastbound and Westbound on the Jubilee
+// east of Westminster, "Platform 2" at Edgware Road. So the swept table and a
+// live sample are merged, and the count shows which directions have trains now -
+// at the end of a line, usually just one.
+//
+// Must resolve identically to installer.py's tube_directions() (WEB-06).
 export async function tubeDirections(lineId, station) {
+  const swept = (await sweptTubeDirections())[lineId]?.[station] || [];
   let data = null;
   try {
     data = await getJson(
       `${TFL_API}/Line/${encodeURIComponent(lineId)}/Arrivals/${encodeURIComponent(station)}`);
-  } catch { /* fall through to the static list */ }
-  const seen = new Set();
+  } catch { /* the swept table still answers */ }
+
+  // Keyed case-insensitively: TfL writes "EastBound" at some stations, and the
+  // firmware matches either spelling, so they are one direction.
+  const names = new Map(swept.map((n) => [n.toLowerCase(), n]));
+  const due = new Map();
   for (const p of Array.isArray(data) ? data : []) {
     const token = platformToken(p.platformName);
-    if (token) seen.add(token);
+    if (!token) continue;
+    const key = token.toLowerCase();
+    if (!names.has(key)) names.set(key, token);
+    if (!due.has(key)) due.set(key, new Set());
+    due.get(key).add(p.vehicleId || p.id);
   }
-  if (seen.size) return [...seen].sort();
-  return (TUBE_DIRECTIONS_FALLBACK[lineId] || []).slice();
+  if (!names.size) {
+    for (const n of TUBE_DIRECTIONS_FALLBACK[lineId] || []) names.set(n.toLowerCase(), n);
+  }
+  return [...names]
+    .map(([key, name]) => ({ name, due: due.get(key)?.size || 0 }))
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 // Live trains for the preview: (status, rows). 'ok' | 'bad_station' | 'net'.

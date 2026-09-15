@@ -383,9 +383,12 @@ two shapes:
 | Platform only | `Platform 2` | `Platform 2` |
 
 The token is the part before the `" - "`, and it is what the firmware matches.
-Both front-ends sample the live feed to offer the tokens actually available at
-that station, because they vary: most of the network gives a compass word, but
-at Edgware Road the platform number is the only thing separating the directions.
+Tokens vary by station, not just by line: more than 50 station-and-line pairs use
+names outside their line's usual pair — `Inner Rail`/`Outer Rail` on the Hainault
+loop, Eastbound/Westbound on the Jubilee east of Westminster, `Northbound Fast` at
+Harrow-on-the-Hill, a bare `Platform 2` at Edgware Road. TfL publishes them nowhere
+but the live feed, so the pickers offer a table swept from the whole network
+(`web/data/tube-directions.json`) merged with a live sample (TUBE-21).
 
 ### 3c.2 Requirements
 
@@ -411,6 +414,7 @@ at Edgware Road the platform number is the only thing separating the directions.
 | TUBE-18 | `RAW_TUBE_DEBUG` build flag dumps parsed trains for field verification |
 | TUBE-19 | Polling is no more frequent than `TUBE_REFRESH_SECONDS` (30 s), matching TfL's own cache |
 | TUBE-20 | A request carries a `User-Agent`. TfL answers a request without one with **HTTP 403** |
+| TUBE-21 | The direction list is **every name the station is known to use**, whether or not a train is due on it at that moment: the swept table (`web/data/tube-directions.json`, built by `web/build-tube-directions.py`) merged with a live sample, keyed case-insensitively, each shown with how many trains are due on it now. Sampling the live feed alone made directions appear and disappear between visits (#8): Acton Town offered only Westbound while no eastbound District train was predicted. A fixed pair per line is no substitute, being wrong at more than 50 stations. A sweep only sees directions with a train due, so a through station seen with a single name also gets its counterpart (`Eastbound`→`Westbound`, `EastBound`→`WestBound`, `Inner Rail`→`Outer Rail`): every Tube line runs both ways through a station that is not the end of a route. Route ends from TfL's own route sequences — termini, and Heathrow T4 on its one-way loop — and stations already seen with two or more names are kept exactly as observed. A station the sweeps never saw on the Circle, District or Hammersmith & City borrows the names seen there on the other two, since the three agree at every station they share except Edgware Road, Baker Street and Aldgate — so the District at Bayswater offers the Circle's `Inner Rail`/`Outer Rail`, not a wrong Eastbound/Westbound. The line's usual pair is offered only for a station nothing was seen at and with nothing due |
 
 ---
 
@@ -583,7 +587,7 @@ PyInstaller) that flashes the firmware and provisions the board.
 | INST-28 | Pier names are folded to ASCII before being shown or stored: TfL returns "St Mary's Wandsworth Pier" with a U+2019 quote, which the board's font cannot draw |
 | INST-29 | The exe is built by CI on a tag and published as a GitHub Release, with a SHA-256 beside it. The firmware is **compiled from that tag's source** in the same job rather than taken from whatever is committed in `installer/firmware/`, so a release always ships an installer and a firmware image from one commit |
 | INST-31 | The installer's service list carries **every** id the firmware and the web page know, in the same order. It is the list `parse_mode()` filters against, so an id missing from it is silently stripped from `mode`: weather and the clock were absent long after both shipped, which dropped them from any web-configured board that was later reconfigured with the exe |
-| INST-32 | **Tube stations are chosen by name from chained lists** — line, then station, then direction — never by typing a Naptan. Each list is fetched live from TfL, and the direction list is sampled from the live feed because the tokens on offer vary by station (TUBE-04) |
+| INST-32 | **Tube stations are chosen by name from chained lists** — line, then station, then direction — never by typing a Naptan. Lines and stations are fetched live from TfL; directions come from the swept table merged with a live sample, each labelled with how many trains are due, exactly as the setup page does it (TUBE-21) |
 | INST-33 | The installer stores the Tube station's display name (`tubename`), satisfying TUBE-17 as INST-24 does for piers |
 | INST-34 | The weather location is **asked for** rather than inherited. The web page reuses the coordinates of whatever stop it already looked up; the exe's pickers do not all carry coordinates back, so it asks once for a postcode or place name and resolves it through the same two lookups the stop search uses. An already-configured board offers to keep what it has |
 | INST-30 | The exe is unsigned, so Windows SmartScreen warns about it. A code-signing certificate costs more per year than the hardware; the published checksum is the alternative, and the warning is documented rather than left to surprise people |

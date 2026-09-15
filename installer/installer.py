@@ -887,10 +887,9 @@ def river_wizard(defaults, required=False):
 # Mirrors web/js/api.js's tube section (WEB-06).
 # --------------------------------------------------------------------------- #
 
-# Fallback directions per line, used when the live sample below comes back
-# empty - engineering hours, a suspended line, or simply the small hours.
-# Without it the wizard would dead-end on a station that is fine by morning.
-# Mirrored in web/js/api.js as TUBE_DIRECTIONS_FALLBACK.
+# The last resort: each line's usual pair, for a station missing from the swept
+# table with nothing due right now. It is wrong at dozens of stations, which is
+# why it is the last resort. Mirrored in web/js/api.js as TUBE_DIRECTIONS_FALLBACK.
 TUBE_DIRECTIONS_FALLBACK = {
     "bakerloo": ["Northbound", "Southbound"],
     "central": ["Eastbound", "Westbound"],
@@ -966,21 +965,46 @@ def tube_stations(line_id):
     return sorted(out, key=lambda x: x[1])
 
 
-def tube_directions(line_id, station):
-    """Directions available for one line at one station, soonest data first.
+def _swept_tube_directions():
+    """The lines table from web/data/tube-directions.json, or {} if unreadable.
 
-    Sampled live because they vary by station: most of the network gives a
-    compass word, but at Edgware Road TfL gives none and the only thing
-    separating the two directions is the platform number."""
+    Bundled into the exe; run as a script, it is read from the web directory
+    beside this one, so the setup page and the installer share one copy."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (resource_path(os.path.join("data", "tube-directions.json")),
+                 os.path.join(here, "..", "web", "data", "tube-directions.json")):
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f).get("lines", {})
+        except (OSError, ValueError):
+            continue
+    return {}
+
+
+def tube_directions(line_id, station):
+    """Directions to offer for one line at one station, as [(name, due_now)].
+
+    Neither source works alone. The live feed only names a direction while a
+    train is due on it, so sampling it as someone picked a station made
+    directions come and go (#8); and a fixed pair per line is wrong at dozens of
+    stations. So the swept table and a live sample are merged, and the count
+    shows which directions have trains now. Must resolve identically to
+    web/js/api.js's tubeDirections() (WEB-06)."""
+    swept = _swept_tube_directions().get(line_id, {}).get(station, [])
+    names = {n.lower(): n for n in swept}
+    due = {}
     data = _tfl_json("/Line/%s/Arrivals/%s" % (line_id, station))
-    seen = set()
     for p in data if isinstance(data, list) else []:
         token = tube_platform_token(p.get("platformName"))
-        if token:
-            seen.add(token)
-    if seen:
-        return sorted(seen)
-    return list(TUBE_DIRECTIONS_FALLBACK.get(line_id, []))
+        if not token:
+            continue
+        key = token.lower()          # TfL writes "EastBound" at some stations
+        names.setdefault(key, token)
+        due.setdefault(key, set()).add(p.get("vehicleId") or p.get("id"))
+    if not names:
+        names = {n.lower(): n for n in TUBE_DIRECTIONS_FALLBACK.get(line_id, [])}
+    return sorted(((name, len(due.get(key, ()))) for key, name in names.items()),
+                  key=lambda d: d[0])
 
 
 def tube_arrivals(line_id, station, direction=""):
@@ -1109,9 +1133,10 @@ def tube_wizard(defaults, required=False):
     if not dirs:
         print("  ! No directions found for that station. Skipping the Tube screen.")
         return "", "", "", ""
-    direction, _ = choose_from([(d, d) for d in dirs],
-                               "Directions at %s" % station_name,
-                               defaults.get("tubedir", ""))
+    direction, _ = choose_from(
+        [(name, "%s  (%s)" % (name, "%d due now" % n if n else "none due right now"))
+         for name, n in dirs],
+        "Directions at %s" % station_name, defaults.get("tubedir", ""))
 
     status, trains = tube_arrivals(line, station, direction)
     if status == "bad_station":
@@ -1124,7 +1149,7 @@ def tube_wizard(defaults, required=False):
                 when = "Due" if mins < 1 else "%d min" % mins
                 print("    %4s  %-32s %s" % (tag, dest, when))
         else:
-            print("  (nothing due right now - the platform is valid)")
+            print("  (nothing due right now)")
     else:
         print("  (couldn't check trains online - accepting the choice as made)")
     return station, line, direction, station_name

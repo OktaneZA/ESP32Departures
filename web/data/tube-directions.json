@@ -1,0 +1,1538 @@
+{
+ "generated": "2026-09-15T12:53:46Z",
+ "source": "TfL Unified API /Line/{id}/Arrivals: platformName before ' - '",
+ "lines": {
+  "bakerloo": {
+   "940GZZLUBST": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCHX": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUEAC": [
+    "Northbound"
+   ],
+   "940GZZLUEMB": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUERB": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUHAW": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUHSN": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUKEN": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUKPK": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUKSL": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLULBN": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUMVL": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUMYB": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUNWY": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUOXC": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUPAC": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUPCC": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUQPS": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLURGP": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUSGP": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUSKT": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWJN": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWKA": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWLO": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWYC": [
+    "Northbound",
+    "Southbound"
+   ]
+  },
+  "central": {
+   "940GZZLUBKE": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUBKH": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBLG": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBND": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBNK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUCHL": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUCWL": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUDBN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUEAN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUEBY": [
+    "Eastbound"
+   ],
+   "940GZZLUEPG": [
+    "Westbound"
+   ],
+   "940GZZLUFLP": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUGFD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUGGH": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUGTH": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUHBN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHGR": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHLT": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUHPK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULGN": [
+    "Eastbound",
+    "Platform 2/3",
+    "Westbound"
+   ],
+   "940GZZLULGT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULVT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULYN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULYS": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMBA": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMED": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUNAN": [
+    "Eastbound",
+    "Platform 2",
+    "Westbound"
+   ],
+   "940GZZLUNBP": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUNHG": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUNHT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUOXC": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUPVL": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUQWY": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLURBG": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLURSG": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLURVY": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUSBC": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSNB": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSPU": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSRP": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSTD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSWF": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUTCR": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUTHB": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWCY": [
+    "Eastbound",
+    "Platform 2/3",
+    "Westbound"
+   ],
+   "940GZZLUWOF": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWRP": [
+    "Eastbound"
+   ],
+   "940GZZLUWSD": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUWTA": [
+    "Eastbound",
+    "Westbound"
+   ]
+  },
+  "circle": {
+   "940GZZLUALD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBBN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBKF": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBST": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBWT": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUCST": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUEMB": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUERC": [
+    "Eastbound"
+   ],
+   "940GZZLUESQ": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUFCN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUGHK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUGPS": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUGTR": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHSC": [
+    "Eastbound"
+   ],
+   "940GZZLUHSK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUKSX": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULAD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULRD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULVT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMGT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMMT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMSH": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUNHG": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUPAC": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUPAH": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLURYO": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSBM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSJP": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSKS": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSSQ": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUTMP": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUTWH": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUVIC": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWLA": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWSM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWSP": [
+    "Eastbound",
+    "Westbound"
+   ]
+  },
+  "district": {
+   "940GZZLUACT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUADE": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBBB": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBEC": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBKF": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBKG": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBSC": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBWR": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBWT": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUCST": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUCWP": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUDGE": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUDGY": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUEBY": [
+    "Eastbound"
+   ],
+   "940GZZLUECM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUECT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUEHM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUEMB": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUEPK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUEPY": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUERC": [
+    "Platform 2"
+   ],
+   "940GZZLUFBY": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUGBY": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUGTR": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHCH": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHSD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHSK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUKWG": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMED": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMMT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMSH": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUNHG": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUPAC": [
+    "Inner Rail",
+    "Outer Rail"
+   ],
+   "940GZZLUPLW": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUPSG": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUPYB": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLURMD": [
+    "Eastbound"
+   ],
+   "940GZZLURVP": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSFB": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSFS": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSGN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSJP": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSKS": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSSQ": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUTMP": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUTNG": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUTWH": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUUPB": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUUPK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUUPM": [
+    "Westbound"
+   ],
+   "940GZZLUUPY": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUVIC": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWBN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWHM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWIM": [
+    "Eastbound"
+   ],
+   "940GZZLUWIP": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWKN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWPL": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWSM": [
+    "Eastbound",
+    "Westbound"
+   ]
+  },
+  "hammersmith-city": {
+   "940GZZLUADE": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBBB": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBBN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBKG": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBST": [
+    "Eastbound",
+    "Northbound",
+    "Westbound"
+   ],
+   "940GZZLUBWR": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUEHM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUERC": [
+    "Eastbound",
+    "Platform 2",
+    "Platform 3",
+    "Westbound"
+   ],
+   "940GZZLUESQ": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUFCN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUGHK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUGPS": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHSC": [
+    "Eastbound"
+   ],
+   "940GZZLUKSX": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULAD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULRD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULVT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMED": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMGT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUPAH": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUPLW": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLURYO": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSBM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSGN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUUPK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWHM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWLA": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWPL": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWSP": [
+    "Eastbound",
+    "Westbound"
+   ]
+  },
+  "jubilee": {
+   "940GZZLUBMY": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBND": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUBST": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCGT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUCPK": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCWR": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUCYF": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUDOH": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUFYR": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUGPK": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUKBN": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUKBY": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLULNB": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUNDN": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUNGW": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUQBY": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUSJW": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUSTD": [
+    "Westbound"
+   ],
+   "940GZZLUSTM": [
+    "Southbound"
+   ],
+   "940GZZLUSWC": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUSWK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWHM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWHP": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWIG": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWLO": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWSM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWYP": [
+    "Northbound",
+    "Southbound"
+   ]
+  },
+  "metropolitan": {
+   "940GZZLUALD": [
+    "Northbound"
+   ],
+   "940GZZLUAMS": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUBBN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBST": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCAL": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCSM": [
+    "North / South"
+   ],
+   "940GZZLUCXY": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCYD": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUEAE": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUESQ": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUFCN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUFYR": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUGPS": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHGD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHOH": [
+    "Northbound",
+    "Northbound Fast",
+    "Southbound",
+    "Southbound Fast"
+   ],
+   "940GZZLUICK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUKSX": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULVT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMGT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMPK": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUNHA": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUNKP": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUNOW": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUNWH": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUPNR": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUPRD": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLURKW": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLURSM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLURSP": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLURYL": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUUXB": [
+    "Eastbound"
+   ],
+   "940GZZLUWAF": [
+    "Southbound"
+   ],
+   "940GZZLUWHW": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWIG": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWYP": [
+    "Northbound",
+    "Southbound"
+   ]
+  },
+  "northern": {
+   "940GZZBPSUST": [
+    "Northbound"
+   ],
+   "940GZZLUACY": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUAGL": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUBLM": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUBNK": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUBOR": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUBTK": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUBTX": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUBZP": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCFM": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCHX": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCND": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCPC": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCPN": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCPS": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCSD": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUCTN": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUEAC": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUEFY": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUEGW": [
+    "Southbound"
+   ],
+   "940GZZLUEMB": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUEUS": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUFYC": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUGDG": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUGGN": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUHBT": [
+    "Southbound"
+   ],
+   "940GZZLUHCL": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUHGT": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUHTD": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUKNG": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUKSH": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUKSX": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLULNB": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLULSQ": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUMDN": [
+    "Northbound"
+   ],
+   "940GZZLUMGT": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUMHL": [
+    "Southbound"
+   ],
+   "940GZZLUMTC": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUODS": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUOVL": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUSKW": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUSWN": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUTAW": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUTBC": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUTBY": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUTCR": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUTFP": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWFN": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWLO": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWOP": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWRR": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZNEUGST": [
+    "Northbound",
+    "Southbound"
+   ]
+  },
+  "piccadilly": {
+   "940GZZLUACT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUALP": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUASG": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUASL": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBDS": [
+    "EastBound",
+    "WestBound"
+   ],
+   "940GZZLUBOS": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUBSC": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUCAR": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUCGN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUCKS": [
+    "Westbound"
+   ],
+   "940GZZLUEAE": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUECM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUECT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUFPK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUGPK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUGTR": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHBN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHGD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHNX": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHPC": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHR4": [
+    "Westbound"
+   ],
+   "940GZZLUHR5": [
+    "Eastbound"
+   ],
+   "940GZZLUHRC": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHSD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHWC": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHWE": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHWT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUHWY": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUICK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUKNB": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUKSX": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLULSQ": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUMRH": [
+    "EastBound",
+    "WestBound"
+   ],
+   "940GZZLUNEN": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUNFD": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUOAK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUOSY": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUPCC": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUPKR": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLURSM": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLURSP": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLURSQ": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLURYL": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSEA": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSGT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSHH": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSKS": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSUH": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUSUT": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUTNG": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUTPN": [
+    "EastBound",
+    "WestBound"
+   ],
+   "940GZZLUUXB": [
+    "Eastbound"
+   ],
+   "940GZZLUWOG": [
+    "EastBound",
+    "WestBound"
+   ]
+  },
+  "victoria": {
+   "940GZZLUBLR": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUBXN": [
+    "Northbound"
+   ],
+   "940GZZLUEUS": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUFPK": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUGPK": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUHAI": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUKSX": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUOXC": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUPCO": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUSKW": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUSVS": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUTMH": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUVIC": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUVXL": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWRR": [
+    "Northbound",
+    "Southbound"
+   ],
+   "940GZZLUWWL": [
+    "Southbound"
+   ]
+  },
+  "waterloo-city": {
+   "940GZZLUBNK": [
+    "Eastbound",
+    "Westbound"
+   ],
+   "940GZZLUWLO": [
+    "Westbound Platform 26"
+   ]
+  }
+ }
+}

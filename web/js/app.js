@@ -445,13 +445,16 @@ async function loadTubeDirections() {
   render();
 
   if (!ui.tube) { sel.innerHTML = '<option value="">Choose a station first…</option>'; return; }
-  // Sampled from the live feed, because the directions on offer vary by
-  // station: mostly a compass word, but at Edgware Road only a platform number.
+  // Every direction TfL names at this station, whether or not a train is due on
+  // it this minute, with a count so a quiet one doesn't look like a mistake.
   const dirs = await api.tubeDirections(ui.tubeline, ui.tube);
   sel.innerHTML = '<option value="">Choose a direction…</option>';
-  for (const d of dirs) sel.append(new Option(d, d));
+  for (const d of dirs) {
+    const note = d.due ? `${d.due} due now` : 'none due right now';
+    sel.append(new Option(`${d.name} — ${note}`, d.name));
+  }
   sel.disabled = false;
-  if (dirs.length === 1) { sel.value = dirs[0]; ui.tubedir = dirs[0]; }
+  if (dirs.length === 1) { sel.value = dirs[0].name; ui.tubedir = dirs[0].name; }
   sel.onchange = () => { ui.tubedir = sel.value; previewTube(); };
   previewTube();
 }
@@ -471,7 +474,7 @@ async function previewTube() {
       : rows.length
         ? `Showing ${label}. Next: `
           + rows.slice(0, 3).map((r) => `${r.dest} ${r.mins < 1 ? 'due' : r.mins + ' min'}`).join(', ')
-        : `Showing ${label} — nothing due right now, but the platform is valid.`;
+        : `Showing ${label} — nothing due right now.`;
   ui.tubePreview = rows.slice(0, 3);
   render();
 }
