@@ -104,8 +104,10 @@ ESP32Departures/
 │   ├── js/serial.js          Web Serial provisioning (PING/CFG/COMMIT)
 │   ├── js/flash.js           flashing a blank board via esptool-js
 │   ├── build-firmware.py     stages firmware + writes its manifest
+│   ├── build-tube-directions.py   rebuilds data/tube-directions.json from TfL
 │   ├── vendor/               esptool-js, byte-identical to upstream
-│   └── data/stations.json    2,608 UK stations: CRS, name, position
+│   ├── data/stations.json    2,608 UK stations: CRS, name, position
+│   └── data/tube-directions.json  Tube direction names per line and station
 └── installer/                self-contained Windows installer (.exe)
 ```
 

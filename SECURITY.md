@@ -18,16 +18,20 @@ puts users at real risk, say so plainly in the title and I will prioritise it.
 The board will tell you the checksum of its own firmware, so you never have to
 take the published binary on trust.
 
-Over USB, send `HASH` and it answers:
+Over USB, send `HASH` and it answers with which board it is and the checksum of
+the firmware it is running — for example:
 
 ```
-md5=60a6ea44c9798da0fd418c59359404d1
-size=1120560
+board=tdisplay-s3
+md5=5c42d0b26a6d4a08378f5271169671bd
+size=1136512
 END
 ```
 
-Compare that with the `md5` for `firmware.bin` in the release manifest at
-`/firmware/manifest.json`, or check the file yourself:
+The checksum changes with every firmware update, so don't compare against the
+example. Compare it with the `md5` listed for your board's `firmware.bin` in the
+setup page's manifest at `/firmware/manifest.json`, or check a downloaded file
+yourself:
 
 ```bash
 md5sum firmware.bin
@@ -35,8 +39,10 @@ md5sum firmware.bin
 
 The setup page does this automatically after connecting and tells you
 **"Verified: running the published firmware"**, or warns you if it does not
-match. A mismatch is expected if you built it yourself or flashed an older
-release — and worth investigating if you did neither.
+match. A mismatch is expected if you built the firmware yourself, flashed an
+older release, or used the Windows installer: the installer carries firmware
+compiled from its own release tag, so its checksum won't match the setup page's.
+If none of those apply, it's worth investigating.
 
 This works because `ESP.getSketchMD5()` hashes exactly the image length written
 by the flasher, which is precisely the contents of `firmware.bin`.
