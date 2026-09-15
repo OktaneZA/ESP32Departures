@@ -222,7 +222,48 @@ you go. Then plug the board in and use the two steps at the bottom of the page:
 Pick your board from the list your browser offers, and it restarts showing live
 times.
 
+**Flashing failed, or the screen went dark?** See [If flashing fails](#if-flashing-fails).
+
 **Changing it later?** Same page, any time. Nothing is baked into the firmware.
+
+---
+
+## If flashing fails
+
+If the log at the bottom of the setup page ends with
+
+```
+Flashing failed: Failed to write compressed data to flash after seq 39 failed with status 201,0
+```
+
+and the screen has gone dark, **the board isn't broken.** An earlier version of
+the setup page wrote the firmware wrongly: it stopped partway and left the board
+with nothing it could start. The chip's own start-up code can't be overwritten,
+so flashing it again brings it straight back.
+
+1. **Reload the setup page with Ctrl+Shift+R** (Cmd+Shift+R on a Mac), so your
+   browser uses the fixed page rather than a copy it saved earlier.
+2. **Fill in your settings again** if the reload cleared them.
+3. **Plug the board in** and check the right one is chosen under *Which board do
+   you have?*
+4. **Press "Flash the firmware"** and pick the board from the list your browser
+   shows. This rewrites everything the failed attempt damaged. It takes about a
+   minute; don't unplug the board.
+5. **Wait for "Firmware written".** It carries straight on and sends your
+   settings. If it asks you to, press **Send my settings** and pick the board
+   again.
+
+**The board isn't in your browser's list?** Hold the **BOOT** button, plug the
+USB cable in, then let go, and try step 4 again. That starts the board in
+programming mode even when it has nothing to run. On the Cheap Yellow Display,
+hold BOOT while you press Flash and keep holding until the log says it detected
+the chip, as usual.
+
+**On Windows with a T-Display-S3,** the
+[desktop installer](https://github.com/OktaneZA/ESP32Departures/releases/latest)
+fixes it too. Run it with the board plugged in: it asks for your settings, then
+reflashes the board and sets it up. You don't need the Arduino IDE for any of
+this.
 
 ---
 
