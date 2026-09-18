@@ -197,3 +197,22 @@
 
 // UK timezone with automatic BST switch (last Sun Mar 01:00 → last Sun Oct 02:00).
 #define TZ_LONDON             "GMT0BST,M3.5.0/1,M10.5.0"
+
+// -----------------------------------------------------------------------------
+// Home Assistant over MQTT (optional) — see ha.cpp.
+// -----------------------------------------------------------------------------
+
+// Reported to Home Assistant as the device's software version, so a board that
+// is behaving oddly says which firmware it is running. CI overrides it with the
+// release tag: -DFW_VERSION=\"v1.3.0\".
+#ifndef FW_VERSION
+#define FW_VERSION            "dev"
+#endif
+
+// Where Home Assistant listens for discovery. Its own default, and changing it
+// is rare enough not to be worth a setting on every configuration surface.
+#define HA_DISCOVERY_PREFIX   "homeassistant"
+
+// How often to publish the WiFi signal strength (seconds). It is a diagnostic,
+// not a control, so it does not need to be quick.
+#define HA_RSSI_SECONDS       60

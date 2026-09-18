@@ -371,6 +371,15 @@ static void fetchTask(void*) {
     for (;;) {
         if (WiFi.status() != WL_CONNECTED) connectWiFi();
 
+        // "Refresh now" from Home Assistant: bring every deadline forward
+        // rather than fetching here, so one path does the fetching and the
+        // back-off rules still apply.
+        if (ha::takeForceRefresh()) {
+            Serial.println("[mqtt] refresh requested");
+            nextTrain = nextBus = nextRiver = nextWx = millis();
+            for (auto& t : nextTube) t = millis();
+        }
+
         if (cfg::get().train_enabled() && (int32_t)(millis() - nextTrain) >= 0) {
             nextTrain = millis() + fetchTrainsOnce();
         }
@@ -429,6 +438,16 @@ struct ScreenState {
 
 static ScreenState screenState(bool awake) {
     const Config& c = cfg::get();
+
+    // Home Assistant outranks the clock, in both directions: a motion sensor
+    // can light the board at 02:00, and an automation can blank it at noon.
+    // That is the whole point of the feature — a fixed window cannot know
+    // whether anybody is in the room. The override lives in RAM only, so a
+    // reboot returns the board to its configured behaviour.
+    if (ha::lightOverrideActive()) {
+        if (!ha::lightOn()) return { true, false, 0 };
+        return { false, false, ha::lightBrightness() };
+    }
 
     if (isBlankHour() && !awake) {
         // Blank hours show the dimmed clock unless told to go properly dark.
@@ -530,6 +549,36 @@ static int tubeSlotOf(Screen s) {
     if (s == Screen::Tube2) return 1;
     if (s == Screen::Tube3) return 2;
     return -1;
+}
+
+// Screen <-> the ids Home Assistant uses. Two enums rather than one because
+// they answer to different masters: Screen is the rotation's business and may
+// be reordered freely, while ha::ViewId crosses the wire and shows up in a
+// dropdown, so it has to stay put.
+static int screenToView(Screen s) {
+    switch (s) {
+        case Screen::Bus:     return ha::VIEW_BUS;
+        case Screen::River:   return ha::VIEW_RIVER;
+        case Screen::Tube:    return ha::VIEW_TUBE1;
+        case Screen::Tube2:   return ha::VIEW_TUBE2;
+        case Screen::Tube3:   return ha::VIEW_TUBE3;
+        case Screen::Weather: return ha::VIEW_WEATHER;
+        case Screen::Clock:   return ha::VIEW_CLOCK;
+        default:              return ha::VIEW_TRAIN;
+    }
+}
+
+static Screen viewToScreen(int v) {
+    switch (v) {
+        case ha::VIEW_BUS:     return Screen::Bus;
+        case ha::VIEW_RIVER:   return Screen::River;
+        case ha::VIEW_TUBE1:   return Screen::Tube;
+        case ha::VIEW_TUBE2:   return Screen::Tube2;
+        case ha::VIEW_TUBE3:   return Screen::Tube3;
+        case ha::VIEW_WEATHER: return Screen::Weather;
+        case ha::VIEW_CLOCK:   return Screen::Clock;
+        default:               return Screen::Train;
+    }
 }
 
 // How long a screen holds before the rotation moves on. The provisioned value
@@ -665,7 +714,10 @@ void loop() {
 
     const input::Press press = input::poll();
     const bool clockPress = press.clock;
-    const bool nextPress = press.next;
+    // A button and a Home Assistant button mean the same thing, so they arrive
+    // at the same place. The latch is cleared by reading it, here and nowhere
+    // else, so a press can be neither lost nor acted on twice.
+    const bool nextPress = press.next || ha::takeNextPress();
 
     if (clockPress) {
         clockHold = !clockHold;
@@ -679,7 +731,14 @@ void loop() {
     }
 
     static uint32_t wokeAt = 0;
-    if (clockPress || nextPress) wokeAt = millis();
+    if (press.clock || press.next) {
+        wokeAt = millis();
+        // A real press at the board wins. A press that appears to do nothing
+        // reads as broken hardware, and when a broker has died with the screen
+        // forced off this is the only way back — on the CYD, whose only local
+        // control is the touchscreen, it is the whole recovery path.
+        ha::clearLightOverride();
+    }
     bool awake = wokeAt && (millis() - wokeAt < NIGHT_WAKE_SECONDS * 1000UL);
 
     // The backlight is set here, once a frame, and nowhere else. No renderer
@@ -688,6 +747,10 @@ void loop() {
     const ScreenState ss = screenState(awake);
     ui::setBrightness(ss.brightness);
     g_screenDark = ss.dark;
+    // Cheap: each compares before it writes, and only a real change wakes the
+    // publisher. The loop never touches the network itself.
+    ha::setScreenOn(!ss.dark);
+    ha::setBrightnessActual(ss.brightness);
 
     static bool darkPainted = false;
     if (ss.dark) {
@@ -700,6 +763,14 @@ void loop() {
         return;
     }
     darkPainted = false;
+
+    if (ss.nightClock) {
+        // Both blank-hour paths return early, so anything that reports what the
+        // board is showing has to be told here too — otherwise Home Assistant
+        // sits on "Unknown" for the whole night, which is exactly the stretch
+        // somebody is most likely to be looking at it from their phone.
+        ha::setCurrentView(ha::VIEW_CLOCK);
+    }
 
     if (ss.nightClock) {
         // Nudge the digits every NIGHT_DRIFT_SECONDS so no pixel is lit for
@@ -744,6 +815,33 @@ void loop() {
     static bool timerStarted = false;
     if (!timerStarted) { screenSince = millis(); timerStarted = true; }
 
+    // A screen asked for from Home Assistant. Matched against the rotation by
+    // Screen value, never by position: active[] is rebuilt every frame and
+    // shrinks as feeds drop out, so an index would mean a different screen from
+    // one frame to the next.
+    int wantView;
+    if (ha::takeViewRequest(wantView)) {
+        const Screen want = viewToScreen(wantView);
+        bool inRotation = false;
+        for (int i = 0; i < nActive; ++i) if (active[i] == want) inRotation = true;
+        if (inRotation) {
+            clockHold = false;
+            screen = want;
+            screenSince = millis();
+            ui::resetScroll();
+        } else if (want == Screen::Clock) {
+            // The clock needs no feed, so honour it the way the button does:
+            // held whether or not it is one of the chosen screens (BTN-04).
+            clockHold = true;
+        } else {
+            // A screen whose feed has never answered. Ignore it and let the
+            // report below tell Home Assistant what is really showing, so the
+            // dropdown snaps back to the truth instead of lying.
+            Serial.printf("[mqtt] '%s' is not in the rotation - ignoring\n",
+                          ha::viewName(wantView));
+        }
+    }
+
     int idx = -1;
     for (int i = 0; i < nActive; ++i) if (active[i] == screen) idx = i;
 
@@ -772,6 +870,10 @@ void loop() {
         screenSince = millis();
         ui::resetScroll();    // long names restart rather than resume mid-scroll
     }
+
+    // What is actually on the panel, which is what Home Assistant should show —
+    // a held clock is the clock, whatever the rotation thinks.
+    ha::setCurrentView(clockHold ? ha::VIEW_CLOCK : screenToView(screen));
 
     // The held clock wins over everything: it is what the button was pressed
     // for, and it works whether or not the clock is one of the chosen screens.
