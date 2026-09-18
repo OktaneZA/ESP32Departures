@@ -14,7 +14,7 @@ export const KEYS = [
   'bus', 'busline', 'busprov', 'busid', 'buskey', 'busbudget', 'river', 'riverline', 'rivername',
   'tube', 'tubeline', 'tubedir', 'tubename', 'mode',
   'bstart', 'bend', 'bright', 'refr',
-  'colfg', 'coldim', 'colwarn', 'colbg',
+  'colfg', 'coldim', 'colwarn', 'colbg', 'rowtime',
   'dwtrain', 'dwbus', 'dwriver', 'dwtube', 'dwclock', 'dwwx',
   'wlat', 'wlon', 'wname', 'nmode',
 ];
@@ -122,6 +122,7 @@ export function defaultConfig() {
     // is never asked for directly.
     wxLat: null, wxLon: null, wxName: '',
     nightClock: true,      // show a dimmed clock during blank hours
+    rowTime: true,         // show the clock time on bus/boat/Tube rows
   };
 }
 
@@ -193,6 +194,7 @@ export function toDeviceConfig(ui) {
     wlon: pruned.includes('weather') ? Math.round(ui.wxLon * 100000) : -2147483648,
     wname: pruned.includes('weather') ? (ui.wxName || '') : '',
     nmode: ui.nightClock ? 1 : 0,
+    rowtime: ui.rowTime ? 1 : 0,
   };
 }
 

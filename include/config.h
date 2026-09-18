@@ -52,6 +52,7 @@ struct Config {
     int    dwell_tube  = -1;   // seconds the tube screen holds
     int    dwell_clock = -1;   // seconds the big-clock screen holds
     int    dwell_wx    = -1;   // seconds the weather screen holds
+    int    row_time    = -1;   // show the clock time on arrival rows (0 = hide)
 
     // Weather. Position is stored as degrees x 100000 because NVS has no float
     // type and the installer already knows the coordinates of whatever stop was
@@ -145,6 +146,12 @@ struct Config {
 
     // Blank hours show the dimmed clock unless explicitly told to go dark.
     bool night_clock() const { return night_mode != 0; }
+
+    // The clock time on the left of an arrival row is the countdown on the
+    // right said a second way, so it can be turned off to give a long
+    // destination the width it costs. Unset means shown, so a board
+    // provisioned before this existed looks exactly as it did.
+    bool row_time_shown() const { return row_time != 0; }
 
     // Hours a day the board is actually showing departures — the whole day, less
     // the blank window. A metered feed's daily allowance is divided across these

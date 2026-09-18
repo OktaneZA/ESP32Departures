@@ -618,9 +618,12 @@ function render() {
     if (!ui.dep) empty = null;   // sample data is more useful than an empty board
   }
 
+  // The arrival boards can drop their left-hand time; the train board keeps it,
+  // since there it is the scheduled departure rather than the countdown again.
+  const hideRowTime = !ui.rowTime && ['bus', 'river', 'tube'].includes(previewScreen);
   const rowHtml = rows.slice(0, 3).map((r) => `
     <div class="b-row">
-      <span class="b-time">${r.a}</span>
+      ${hideRowTime ? '' : `<span class="b-time">${r.a}</span>`}
       ${r.b ? `<span>${escapeHtml(r.b)}</span>` : ''}
       <span class="b-dest">${escapeHtml(r.c)}</span>
       <span class="b-right" style="color:${r.late ? warn : fg}">${escapeHtml(r.d)}${r.p ? '  P' + r.p : ''}</span>
@@ -994,6 +997,8 @@ function debounce(fn, ms) {
 // ──────────────────────────────── boot ───────────────────────────────────
 $('ssid').oninput = () => { ui.ssid = $('ssid').value; showProblems(); };
 $('pass').oninput = () => { ui.pass = $('pass').value; };
+$('rowTime').checked = ui.rowTime;
+$('rowTime').onchange = () => { ui.rowTime = $('rowTime').checked; render(); };
 
 initHours();
 initSliders();

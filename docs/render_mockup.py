@@ -23,6 +23,7 @@ Run with no arguments to regenerate everything:
   mockup-weather.png      current conditions
   mockup-scroll-demo.png  train board, delayed + cancelled
   mockup-bus-busy.png     bus screen, destination too long for its column
+  mockup-bus-no-time.png  the same screen with the clock time hidden (rowtime=0)
 """
 
 import os
@@ -120,16 +121,23 @@ def draw_row(img, draw, y, dep, pal):
     clip(img, draw, dep["dest"], f_row, TRAIN_DEST_X, y, dest_max, colour, pal["bg"])
 
 
-def draw_arrival_row(img, draw, y, ar, pal):
-    """Mirrors drawArrivalRow(): time, route, destination, countdown right."""
+def draw_arrival_row(img, draw, y, ar, pal, show_time=True):
+    """Mirrors drawArrivalRow(): time, route, destination, countdown right.
+
+    With `show_time` off the clock time on the left goes and the other columns
+    close up, as the board does when `rowtime` is 0 (DISP-32)."""
     dy = (font_h(f_row) - font_h(f_status)) / 2
     ew = int(draw.textlength(ar["eta"], font=f_status))
 
-    draw.text((sx(0), sx(y) + dy), ar["when"], font=f_status, fill=pal["fg"])
+    if show_time:
+        draw.text((sx(0), sx(y) + dy), ar["when"], font=f_status, fill=pal["fg"])
     draw.text((sx(W) - ew, sx(y) + dy), ar["eta"], font=f_status, fill=pal["fg"])
-    draw.text((sx(BUS_ROUTE_X), sx(y)), ar["line"], font=f_row, fill=pal["fg"])
-    clip(img, draw, ar["dest"], f_row, BUS_DEST_X, y,
-         W - BUS_DEST_X - ew / SCALE - 8, pal["fg"], pal["bg"])
+
+    route_x = BUS_ROUTE_X if show_time else 0
+    dest_x = BUS_DEST_X if show_time else BUS_DEST_X - BUS_ROUTE_X
+    draw.text((sx(route_x), sx(y)), ar["line"], font=f_row, fill=pal["fg"])
+    clip(img, draw, ar["dest"], f_row, dest_x, y,
+         W - dest_x - ew / SCALE - 8, pal["fg"], pal["bg"])
 
 
 def finish(img, draw, out_name, pal):
@@ -165,7 +173,7 @@ def render_train(departures, out_name, station="Motspur Park", pal=CLASSIC):
     finish(img, draw, out_name, pal)
 
 
-def render_arrivals(tag, name, arrivals, empty_msg, out_name, pal=CLASSIC):
+def render_arrivals(tag, name, arrivals, empty_msg, out_name, pal=CLASSIC, show_time=True):
     """Mirrors drawArrivalsBoard(), which draws both the bus and river screens."""
     img = Image.new("RGB", (sx(W), sx(H)), pal["bg"])
     draw = ImageDraw.Draw(img)
@@ -176,7 +184,7 @@ def render_arrivals(tag, name, arrivals, empty_msg, out_name, pal=CLASSIC):
                   empty_msg, font=f_row_bold, fill=pal["dim"])
     else:
         for i, ar in enumerate(arrivals[:3]):
-            draw_arrival_row(img, draw, ROW_Y0 + i * ROW_STEP, ar, pal)
+            draw_arrival_row(img, draw, ROW_Y0 + i * ROW_STEP, ar, pal, show_time)
 
     finish(img, draw, out_name, pal)
 
@@ -316,9 +324,9 @@ def bezel_and_save(img, out_name):
     print(f"  wrote {out_name}")
 
 
-def render_bus(stop, line_filter, arrivals, out_name, pal=CLASSIC):
+def render_bus(stop, line_filter, arrivals, out_name, pal=CLASSIC, show_time=True):
     render_arrivals(f"BUS {line_filter}" if line_filter else "BUS",
-                    stop, arrivals, "No buses due", out_name, pal)
+                    stop, arrivals, "No buses due", out_name, pal, show_time)
 
 
 def render_river(pier, line_filter, sailings, out_name, pal=CLASSIC):
@@ -380,3 +388,10 @@ if __name__ == "__main__":
         {"when": at(5),  "line": "N19", "dest": "Tottenham Court Road", "eta": eta(5)},
         {"when": at(10), "line": "14",  "dest": "Russell Square",       "eta": eta(10)},
     ], "mockup-bus-busy.png")
+
+    # The same stop with the clock time hidden, so the two can be compared.
+    render_bus("Green Park Station", "", [
+        {"when": at(0),  "line": "38",  "dest": "Clapton Pond",         "eta": eta(0)},
+        {"when": at(5),  "line": "N19", "dest": "Tottenham Court Road", "eta": eta(5)},
+        {"when": at(10), "line": "14",  "dest": "Russell Square",       "eta": eta(10)},
+    ], "mockup-bus-no-time.png", show_time=False)

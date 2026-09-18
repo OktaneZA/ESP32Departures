@@ -42,7 +42,7 @@ CONFIG_KEYS = (
     "river", "riverline", "rivername",
     "tube", "tubeline", "tubedir", "tubename", "mode",
     "bstart", "bend", "bright", "refr",
-    "colfg", "coldim", "colwarn", "colbg",
+    "colfg", "coldim", "colwarn", "colbg", "rowtime",
     "dwtrain", "dwbus", "dwriver", "dwtube", "dwclock", "dwwx",
     "wlat", "wlon", "wname", "nmode",
 )

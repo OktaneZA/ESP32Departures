@@ -469,6 +469,7 @@ setup" having silently lost its WiFi, API key and station.
 | `wlon` | No | unset | Weather longitude × 100000 |
 | `wname` | No | - | Place label for the weather header |
 | `nmode` | No | `-1` | Blank hours: `0` = screen off, otherwise a dimmed clock |
+| `rowtime` | No | `-1` | Show the expected clock time on arrival rows; `0` hides it and the other columns close up (DISP-32). Unset means shown |
 | `refr` | No | `60` | API poll interval (seconds) |
 
 | ID | Requirement |
@@ -526,6 +527,7 @@ setup" having silently lost its WiFi, API key and station.
 | DISP-29 | Overlapping shapes in a weather icon are separated by a **knockout** — the cloud drawn once oversized in the background colour, then again at true size in the foreground. On a single-colour panel two overlapping filled shapes otherwise fuse, and "sun behind cloud" comes out looking like a snowman |
 | DISP-30 | Drizzle uses straight drops and rain slanted ones, so the two are distinguishable at icon size; fog bars sit clear of the cloud base, which they otherwise fuse with into a barcode |
 | DISP-31 | The weather detail rows use the bold face at full brightness, not `DIM`. That colour is for the mode tag; using it for real readings made them the hardest thing on the board to read |
+| DISP-32 | The arrival rows' left-hand clock time can be switched off (`rowtime`), and the route and destination then close up rather than leaving a gap. That time is the countdown on the right expressed a second way, and it costs the destination 48px of 320 — about four characters, enough that "Walthamstow Central" scrolls with it and fits without. The train board is deliberately unaffected: its left column is the scheduled departure, not the countdown restated. The compile-time `HIDE_ONTIME_STATUS` (DISP-04) does the same thing for the train board's status column |
 
 ---
 

@@ -14,7 +14,7 @@
 // Keys: ssid pass key dep dest plat tz bus busline river riverline rivername mode
 //       tube tubeline tubedir tubename
 //       busprov busid buskey busbudget bstart bend bright refr colfg coldim colwarn colbg dwtrain
-//       dwbus dwriver dwtube dwclock dwwx wlat wlon wname nmode
+//       dwbus dwriver dwtube dwclock dwwx wlat wlon wname nmode rowtime
 
 #include "config.h"
 #include "app_config.h"   // compile-time defaults
@@ -78,6 +78,7 @@ void load_from_nvs(Config& c) {
     c.wx_lon      = prefs.getInt("wlon",   INT32_MIN);
     c.wx_name     = prefs.getString("wname", "");
     c.night_mode  = prefs.getInt("nmode",  -1);
+    c.row_time    = prefs.getInt("rowtime", -1);
     prefs.end();
 }
 
@@ -127,6 +128,7 @@ void stage_kv(const String& kv) {
     else if (k == "wlon")   g_stage.wx_lon      = v.toInt();
     else if (k == "wname")  g_stage.wx_name     = v;
     else if (k == "nmode")  g_stage.night_mode  = v.toInt();
+    else if (k == "rowtime") g_stage.row_time    = v.toInt();
     else { Serial.print("ERR key "); Serial.println(k); return; }
 
     Serial.print("ACK "); Serial.println(k);
@@ -174,6 +176,7 @@ void commit_and_reboot() {
     prefs.putInt("wlon",   g_stage.wx_lon);
     prefs.putString("wname", g_stage.wx_name);
     prefs.putInt("nmode",  g_stage.night_mode);
+    prefs.putInt("rowtime", g_stage.row_time);
     prefs.end();
     Serial.println("SAVED");
     Serial.flush();
@@ -290,6 +293,7 @@ void handle_line(String line) {
         Serial.print("wlon=");   Serial.println(g_cfg.wx_lon);
         Serial.print("wname=");  Serial.println(g_cfg.wx_name);
         Serial.print("nmode=");  Serial.println(g_cfg.night_mode);
+        Serial.print("rowtime="); Serial.println(g_cfg.row_time);
         // Which board this is, so a configurator can pick the right firmware
         // without guessing from a USB vendor id -- that identifies the bridge
         // chip, not the board behind it.

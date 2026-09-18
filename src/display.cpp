@@ -118,6 +118,10 @@ RowScroll s_headerScroll;
 // and every other screen can put it back without consulting the config.
 uint8_t s_brightness = BRIGHTNESS;
 
+// Whether an arrival row carries the expected clock time on its left. Default
+// on, so nothing changes for a board that never set it.
+bool s_showArrivalTime = true;
+
 // All three boards share one layout so they read as the same instrument: a
 // header row naming the mode and the station/stop/pier, then three identical
 // rows, then the clock. Times sit in the small font — they are fixed-width and always legible,
@@ -212,18 +216,25 @@ void drawArrivalRow(int y, RowScroll& scroll, const BusArrival& ar) {
     int ew = spr.textWidth(eta);
     int smallDy = (rowH - smallH) / 2;          // sit the small text on the row's centre
     spr.setTextColor(AMBER, BLACK);
-    spr.setCursor(0, y + smallDy);
-    spr.print(when);
+    if (s_showArrivalTime) {
+        spr.setCursor(0, y + smallDy);
+        spr.print(when);
+    }
     spr.setCursor(W - ew, y + smallDy);
     spr.print(eta);
 
+    // With the time hidden the columns close up rather than leaving a gap, so
+    // the destination gains the whole width the time had (DISP-32).
+    const int routeX = s_showArrivalTime ? BUS_ROUTE_X : 0;
+    const int destX  = s_showArrivalTime ? BUS_DEST_X : BUS_DEST_X - BUS_ROUTE_X;
+
     spr.setFont(ROW_FONT);
     spr.setTextColor(AMBER, BLACK);
-    spr.setCursor(BUS_ROUTE_X, y);
+    spr.setCursor(routeX, y);
     spr.print(ar.line);
 
-    const int destMax = W - BUS_DEST_X - ew - 8;
-    drawScrolling(scroll, ar.destination, BUS_DEST_X, y, destMax, rowH);
+    const int destMax = W - destX - ew - 8;
+    drawScrolling(scroll, ar.destination, destX, y, destMax, rowH);
 }
 
 // One departure row: [time]  [destination...]  [right-aligned status (+platform)].
@@ -489,6 +500,10 @@ void setTheme(int fg, int dim, int warn, int bg) {
     apply(s_rgb[2], warn);
     apply(s_rgb[0], bg);
     applyPalette();
+}
+
+void setRowLayout(bool showArrivalTime) {
+    s_showArrivalTime = showArrivalTime;
 }
 
 void renderSetup() {

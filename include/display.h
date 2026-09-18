@@ -17,6 +17,14 @@ void setBrightness(uint8_t brightness);
 // did. Call once at boot, before the first render.
 void setTheme(int fg, int dim, int warn, int bg);
 
+// Whether the arrival rows (bus, boat, Tube) carry the expected clock time on
+// the left. With it off the route and destination close up, and the
+// destination gains the 48px the time occupied — about four more characters
+// before a long name has to scroll. Call before the first frame, like
+// setTheme(); the train board is unaffected, its left column being a
+// scheduled time rather than the countdown restated.
+void setRowLayout(bool showArrivalTime);
+
 // "Awaiting setup" screen shown until the device is provisioned by the installer.
 void renderSetup();
 

@@ -418,6 +418,7 @@ void setup() {
     input::begin();
     // Before the first frame, so even the "Awaiting setup" screen is themed.
     ui::setTheme(c.col_fg, c.col_dim, c.col_warn, c.col_bg);
+    ui::setRowLayout(c.row_time_shown());
 
     // Not configured yet: show the setup screen and wait for the installer.
     // (A COMMIT over serial saves to NVS and reboots into the provisioned path.)
