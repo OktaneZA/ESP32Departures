@@ -64,14 +64,14 @@ void renderTubeBoard(const std::vector<TubeArrival>& arrivals, const String& sta
 // Render one full frame of the big-clock screen: HH:MM filling the panel in the
 // provisioned palette.
 //
-// `night` is for blank hours — it drops the backlight to NIGHT_BRIGHTNESS so the
-// board is readable in the dark without lighting the room, and the caller is
-// expected to restore the brightness on the way out.
+// Draws only — the backlight is not its business. The caller sets brightness
+// once per frame (screenState() in main.cpp), which is what lets the night
+// clock be dim without every screen after it inheriting the dimming.
 //
 // `drift` nudges the digits a few pixels from centre. Blank hours run for eight
 // hours with three of the four digits unchanging, so moving it occasionally
 // keeps any one pixel from being lit all night.
-void renderClock(bool night, int driftX, int driftY);
+void renderClock(int driftX, int driftY);
 
 // Render one full frame of the weather screen. Shares the header and clock with
 // every other board; the body is a large temperature and condition over two dim

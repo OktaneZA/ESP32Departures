@@ -114,8 +114,11 @@ RowScroll s_tubeScroll[MAX_TUBE_ARRIVALS];
 RowScroll s_wxScroll;          // the weather condition, if it overflows
 RowScroll s_headerScroll;
 
-// The user's chosen brightness, remembered so the night clock can dim the panel
-// and every other screen can put it back without consulting the config.
+// The brightness the panel is currently set to, so setBrightness() can skip the
+// write when nothing has changed. The render loop decides what this should be
+// every frame (see screenState() in main.cpp); no renderer sets it, because a
+// renderer that sets policy is how the night clock used to strand every other
+// screen at NIGHT_BRIGHTNESS until the rotation came back round to the clock.
 uint8_t s_brightness = BRIGHTNESS;
 
 // Whether an arrival row carries the expected clock time on its left. Default
@@ -481,6 +484,10 @@ bool getTouch(int& x, int& y) {
 }
 
 void setBrightness(uint8_t brightness) {
+    // Called once per frame now that the render loop owns the backlight, so an
+    // unchanged value must cost nothing: without this the LEDC duty register
+    // would be rewritten ~30 times a second to the value it already holds.
+    if (brightness == s_brightness) return;
     s_brightness = brightness;
     lcd.setBrightness(brightness);
 }
@@ -644,7 +651,7 @@ void renderError(const String& title, const String& detail) {
     spr.pushSprite(0, 0);
 }
 
-void renderClock(bool night, int driftX, int driftY) {
+void renderClock(int driftX, int driftY) {
     spr.fillScreen(BLACK);
 
     time_t now = time(nullptr);
@@ -671,7 +678,6 @@ void renderClock(bool night, int driftX, int driftY) {
     spr.fillRect(0, H / 2 + driftY - 1, W, 3, BLACK);
 
     spr.pushSprite(0, 0);
-    lcd.setBrightness(night ? NIGHT_BRIGHTNESS : s_brightness);
 }
 
 // Print text at (x, y), drawing every degree sign rather than typing it.

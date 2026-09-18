@@ -342,14 +342,20 @@ static uint32_t fetchWeatherOnce() {
 
 static bool isBlankHour();
 
-// A metered bus feed must not spend requests while the screen is blank. Its
+// Whether the panel is dark right now — written once a frame by the render loop
+// and read here on the fetch task. One word written by one task and read by
+// another is benign, and it says the true thing: what a metered feed cares
+// about is whether anybody can see the screen, not what the clock reads.
+static volatile bool g_screenDark = false;
+
+// A metered bus feed must not spend requests while the screen is dark. Its
 // allowance is divided across Config::on_hours() precisely so that none of it
-// goes on hours nobody is looking; polling through the blank window would
+// goes on hours nobody is looking; polling through a dark screen would
 // overspend the day by exactly those hours. Deferring rather than consuming
 // also means the first poll after the screen wakes is immediate, because the
 // deadline has been sitting in the past all night.
 static bool busPollAllowed() {
-    return cfg::get().bus_budget <= 0 || !isBlankHour();
+    return cfg::get().bus_budget <= 0 || !g_screenDark;
 }
 
 static void fetchTask(void*) {
@@ -400,7 +406,41 @@ static bool isBlankHour() {
         return h >= c.blank_start && h < c.blank_end;
     return h >= c.blank_start || h < c.blank_end;   // wraps past midnight
 }
+
 // ---------------------------------------------------------------------------
+// What the panel should be doing this frame.
+//
+// One place decides three things together — whether to go dark, whether to show
+// the drifting night clock, and what the backlight must be — because they are
+// one decision and used to be three. Brightness in particular was nobody's job:
+// it was restored as a side effect of drawing the clock, so after a night, or
+// after a button press woke the board, every other screen stayed at
+// NIGHT_BRIGHTNESS until the rotation happened to come back round to the clock.
+// A board with the clock switched off never recovered at all.
+//
+// Renderers draw. This decides. The caller applies it once per frame.
+// ---------------------------------------------------------------------------
+struct ScreenState {
+    bool    dark;         // backlight off entirely, nothing worth drawing
+    bool    nightClock;   // the dimmed drifting clock instead of the rotation
+    uint8_t brightness;   // what the backlight must be this frame
+};
+
+static ScreenState screenState(bool awake) {
+    const Config& c = cfg::get();
+
+    if (isBlankHour() && !awake) {
+        // Blank hours show the dimmed clock unless told to go properly dark.
+        // "Dark" now means the backlight really is off: renderBlank() paints
+        // black, but a black screen with the backlight still lit is a glowing
+        // rectangle, which is not what anyone means by off.
+        if (c.night_clock()) return { false, true, (uint8_t)NIGHT_BRIGHTNESS };
+        return { true, false, 0 };
+    }
+
+    return { false, false, (uint8_t)Config::pick(c.brightness, BRIGHTNESS, 0, 255) };
+}
+
 // ---------------------------------------------------------------------------
 // Setup / loop
 // ---------------------------------------------------------------------------
@@ -636,20 +676,42 @@ void loop() {
     if (clockPress || nextPress) wokeAt = millis();
     bool awake = wokeAt && (millis() - wokeAt < NIGHT_WAKE_SECONDS * 1000UL);
 
-    if (isBlankHour() && !awake) {
-        if (c.night_clock()) {
-            // Nudge the digits every NIGHT_DRIFT_SECONDS so no pixel is lit for
-            // the whole night. Four positions on a slow rotation is enough —
-            // the point is that nothing stays put, not that it wanders.
-            time_t now = time(nullptr);
-            int step = (int)((now / NIGHT_DRIFT_SECONDS) & 3);
-            int dx = (step == 1) ? NIGHT_DRIFT_PX : (step == 3) ? -NIGHT_DRIFT_PX : 0;
-            int dy = (step == 0) ? -NIGHT_DRIFT_PX / 2 : (step == 2) ? NIGHT_DRIFT_PX / 2 : 0;
-            ui::renderClock(true, dx, dy);
-        } else {
-            ui::renderBlank();
+    // The backlight is set here, once a frame, and nowhere else. No renderer
+    // touches it, so no renderer can leave it somewhere the next screen did not
+    // ask for.
+    const ScreenState ss = screenState(awake);
+    ui::setBrightness(ss.brightness);
+    g_screenDark = ss.dark;
+
+    static bool darkPainted = false;
+    if (ss.dark) {
+        // Paint black once, not every second: with the backlight off there is
+        // nothing to see, and repainting only spends SPI bandwidth. The short
+        // delay is about input, not drawing — it is how quickly a button press
+        // gets us out of here.
+        if (!darkPainted) { ui::renderBlank(); darkPainted = true; }
+        delay(50);
+        return;
+    }
+    darkPainted = false;
+
+    if (ss.nightClock) {
+        // Nudge the digits every NIGHT_DRIFT_SECONDS so no pixel is lit for
+        // the whole night. Four positions on a slow rotation is enough —
+        // the point is that nothing stays put, not that it wanders.
+        time_t now = time(nullptr);
+        int step = (int)((now / NIGHT_DRIFT_SECONDS) & 3);
+        int dx = (step == 1) ? NIGHT_DRIFT_PX : (step == 3) ? -NIGHT_DRIFT_PX : 0;
+        int dy = (step == 0) ? -NIGHT_DRIFT_PX / 2 : (step == 2) ? NIGHT_DRIFT_PX / 2 : 0;
+        // The clock changes once a minute and drifts every NIGHT_DRIFT_SECONDS,
+        // so redrawing twice a second is already generous; the frame budget goes
+        // to noticing a press instead.
+        static uint32_t lastNightDraw = 0;
+        if (millis() - lastNightDraw >= 500) {
+            ui::renderClock(dx, dy);
+            lastNightDraw = millis();
         }
-        delay(1000);
+        delay(50);
         return;
     }
 
@@ -708,7 +770,7 @@ void loop() {
     // The held clock wins over everything: it is what the button was pressed
     // for, and it works whether or not the clock is one of the chosen screens.
     if (clockHold) {
-        ui::renderClock(false, 0, 0);
+        ui::renderClock(0, 0);
     } else if (nActive == 0) {
         // Trains are off and no TfL feed has answered yet. Report the worst of
         // the failures, since a board with no screen at all is almost always a
@@ -740,7 +802,7 @@ void loop() {
     } else if (screen == Screen::Weather) {
         ui::renderWeatherBoard(wx, c.wx_name.length() ? c.wx_name : String("Weather"), wxErr);
     } else if (screen == Screen::Clock) {
-        ui::renderClock(false, 0, 0);
+        ui::renderClock(0, 0);
     } else if (badStation) {
         ui::renderError("Unknown station", c.dep_crs);
     } else {
