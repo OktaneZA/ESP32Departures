@@ -476,6 +476,12 @@ setup" having silently lost its WiFi, API key and station.
 | `wname` | No | - | Place label for the weather header |
 | `nmode` | No | `-1` | Blank hours: `0` = screen off, otherwise a dimmed clock |
 | `rowtime` | No | `-1` | Show the expected clock time on arrival rows; `0` hides it and the other columns close up (DISP-32). Unset means shown |
+| `mqtthost` | No | - | MQTT broker address for Home Assistant (HA-01). **Empty = the whole integration is off**, and the board opens no socket. NVS key `mqhost` |
+| `mqttport` | No | `-1` | Broker port; unset means 1883. NVS key `mqport` |
+| `mqttuser` | No | - | Broker username; empty connects anonymously. NVS key `mqusr` |
+| `mqttpass` | No | - | Broker password. **Secret** — reported only as `mqttpasslen` (HA-03). NVS key `mqpass` |
+| `mqttprefix` | No | - | Root of every topic the board publishes; unset means `departurebuddy`. NVS key `mqpfx` |
+| `mqtten` | No | `-1` | `0` switches Home Assistant off **but keeps the settings** (HA-05). NVS key `mqten` |
 | `refr` | No | `60` | API poll interval (seconds) |
 
 | ID | Requirement |
@@ -694,6 +700,42 @@ pin) and `BUTTON_2` (GPIO14).
 
 ---
 
+## 8d. Home Assistant over MQTT (optional)
+
+Everything else the board does, it decides for itself from a clock and a feed.
+This is the one place something outside the board can tell it what to do, which
+is why the rules below are mostly about **who wins** and **what cannot happen**
+rather than about what it publishes.
+
+The feature exists for a case a clock can never cover: *keep the screen off
+until a motion sensor says somebody is there.* See [docs/mqtt.md](docs/mqtt.md)
+for setting it up.
+
+| ID | Requirement |
+|---|---|
+| HA-01 | Entirely **optional**. With no broker configured the board opens no socket, starts no task, and behaves exactly as it did before the feature existed |
+| HA-02 | Six settings — `mqtthost`, `mqttport`, `mqttuser`, `mqttpass`, `mqttprefix`, `mqtten` — stored under abbreviated NVS names (`mqhost`, `mqport`, `mqusr`, `mqpass`, `mqpfx`, `mqten`) because NVS caps a key at 15 characters and fails silently past it |
+| HA-03 | The broker password is a **secret**: `GET` reports `mqttpasslen` and never the value, exactly as the WiFi password and TransportAPI key are (PROV-07, SEC-03) |
+| HA-04 | An empty host means off, the same way an empty `bus` means no bus screen (CFG-05). A disabled integration sends no credentials either, so a board that is not talking to a broker does not store one's password |
+| HA-05 | `mqtten=0` switches the integration off **but keeps its settings**. Because the password is never reported back, "off for a week" must not mean retyping a credential the user cannot read off the device |
+| HA-06 | While Home Assistant holds the light it **overrides the configured blank hours in both directions** — it can light the board at 02:00 and blank it at noon. A fixed clock window cannot know whether anybody is in the room; that is the whole point |
+| HA-07 | The override lives in RAM and **dies at reboot**. A board that came back from a power cut still dark, because of an automation nobody remembers writing, is a support request rather than a feature |
+| HA-08 | A physical press or touch **clears the override** and tells Home Assistant, so the two agree. It is also the only way back when a broker dies with the screen forced off — and on the CYD, whose only local control is the touchscreen, it is the entire recovery path |
+| HA-09 | "Off" means the backlight is actually **0**. `renderBlank()` only paints black, and a black screen with the backlight lit is a glowing rectangle, not an off one |
+| HA-10 | One device, **seven entities**: a backlight light (JSON schema, brightness 0–255), buttons for next panel and refresh, a select and a sensor for the current view, and diagnostics for screen state and RSSI |
+| HA-11 | Discovery is **retained** and published one entity at a time — the client buffer holds one payload, not seven — using Home Assistant's abbreviated keys and `~` substitution to keep each under the buffer |
+| HA-12 | Discovery is republished when Home Assistant announces its own restart (`homeassistant/status` = `online`). Without it, entities stay unavailable until the board happens to reboot |
+| HA-13 | Availability is a **Last Will**, not a message the board sends: a board that has crashed cannot announce that it has crashed |
+| HA-14 | Inbound messages are ignored for one second after subscribing. Retained messages arrive on subscribe, and a retained command is an echo of an old intent — this is also what makes HA-07 true in practice |
+| HA-15 | **MQTT never draws, and the renderer never talks to MQTT.** Commands land in POD fields behind a mutex; `loop()` is the only code that calls `ui::*` and never calls an `esp_mqtt_*` function. A broker that is down, wrong or hostile therefore cannot affect the display |
+| HA-16 | Each command latch has exactly **one consumer**, which clears it as it reads, so a command can be neither lost nor acted on twice |
+| HA-17 | A view request carries a `Screen` value, never a position in the rotation: `active[]` is rebuilt every frame and shrinks as feeds drop out, so an index would select a different screen from one frame to the next |
+| HA-18 | The client is ESP-IDF's `esp-mqtt`, already inside the Arduino core (`-lmqtt` is on the default link line), so the feature adds **no new dependency** to pin or hash-check (SEC-11, SEC-12). It uses IDF 4.4's flat config struct, which is what the Arduino 2.0.x core provides |
+| HA-19 | The client declines to start below a minimum free heap. An MQTT client that squeezes in with nothing to spare does not fail visibly — it fails hours later as a TLS handshake in the fetch task, and a feed goes stale for reasons nobody connects to it |
+| HA-20 | A metered bus feed pauses while the screen is dark and resumes when it wakes, so an HA-blanked board spends no allowance. Accepted consequence: a night of frequent motion wakes can overspend the day's budget, which is the right trade against showing a stale board to somebody standing in front of it |
+
+---
+
 ## 9. Security Requirements
 
 | ID | Requirement |
@@ -712,6 +754,7 @@ pin) and `BUTTON_2` (GPIO14).
 | SEC-12 | CI fails if the vendored `esptool.js` no longer matches the SHA-256 recorded in `web/vendor/README.md`. That file flashes people's hardware, so its integrity is enforced rather than assumed |
 | SEC-13 | The board listens on no port and runs no server, so there is no service to flood. Poll intervals are matched to each upstream's own cache — being a good citizen of free APIs is itself a security property |
 | SEC-14 | Deliberately **not** protected, and documented as such in `SECURITY.md`: the exe is unsigned, there is no secure boot or flash encryption, and the serial protocol has no PIN. Physical access is total access, which is the right trade for a desk ornament showing public data |
+| SEC-15 | The broker password is stored in NVS and reported only as `mqttpasslen` (HA-03). MQTT itself is **plain TCP on the local network** — a deliberate trade, and how most home brokers are actually run: anyone already on the network can watch the board's traffic and command its screen, but the board runs no server, listens on no port, and publishes nothing private. `docs/mqtt.md` states this plainly, and the way to decline the trade is to leave the feature off |
 
 ---
 
