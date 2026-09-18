@@ -67,6 +67,52 @@
       <input id="refr" type="range" min="15" max="300" step="5" autocomplete="off">
     </div>
   </div>
+
+  <details id="mqtt">
+    <summary>Home Assistant (optional)</summary>
+    <p class="hint">Gives Home Assistant a light for the screen, buttons to change
+       panel and refresh, and sensors for what it’s showing. Turning the screen
+       off from HA overrides the hours above — which is the point, if a motion
+       sensor is what decides.</p>
+
+    <label class="svc-toggle">
+      <input id="mqttOn" type="checkbox" autocomplete="off">
+      <span><strong>Publish to an MQTT broker</strong>
+      <span>Leave this off and the board never opens a connection.</span></span>
+    </label>
+
+    <div id="mqttFields" hidden>
+      <div class="grid-2">
+        <div class="field">
+          <label for="mqtthost">Broker address</label>
+          <input id="mqtthost" type="text" placeholder="192.168.1.73" autocomplete="off">
+          <p class="hint">An IP address. A <code>.local</code> name needs mDNS,
+             which the board does not do — it fails exactly like a dead broker.</p>
+        </div>
+        <div class="field">
+          <label for="mqttport">Port</label>
+          <input id="mqttport" type="number" min="1" max="65535" autocomplete="off">
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label for="mqttuser">Username</label>
+          <input id="mqttuser" type="text" autocomplete="off">
+          <p class="hint">Leave both blank if your broker allows anonymous access.</p>
+        </div>
+        <div class="field">
+          <label for="mqttpass">Password</label>
+          <input id="mqttpass" type="password" autocomplete="off">
+        </div>
+      </div>
+      <div class="field">
+        <label for="mqttprefix">Topic prefix</label>
+        <input id="mqttprefix" type="text" autocomplete="off">
+        <p class="hint">Everything the board publishes hangs off this. The
+           default suits all but the busiest brokers.</p>
+      </div>
+    </div>
+  </details>
 </section>
 
 <!-- ────────────────────────── Part 2: services ────────────────────────── -->

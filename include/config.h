@@ -73,6 +73,21 @@ struct Config {
     // changes behaviour on upgrade — a dark screen is strictly less useful.
     int    night_mode = -1;
 
+    // Home Assistant over MQTT (optional). An empty host means the client never
+    // starts and the board opens no socket at all, the same way an empty
+    // bus_stop means no bus screen.
+    //
+    // mqtt_on is a separate switch rather than "clear the host", because the
+    // password is a secret the board will never report back (PROV-07): turning
+    // the integration off for a week must not mean retyping a credential the
+    // user cannot read off the device.
+    String mqtt_host;      // broker IP or a name the router resolves (not mDNS)
+    String mqtt_user;      // empty = connect anonymously
+    String mqtt_pass;      // secret — GET reports mqttpasslen, never the value
+    String mqtt_prefix;    // topic root ("" = kMqttDefaultPrefix)
+    int    mqtt_port = -1; // -1 = not set, so kMqttDefaultPort applies
+    int    mqtt_on   = -1; // 0 = off but keep the settings; anything else = on
+
     // A stored setting wins only when it was actually set; otherwise the
     // compile-time default applies. Colours are 16-bit, so any value outside
     // 0..0xFFFF is treated as unset rather than silently drawn as garbage.
@@ -212,6 +227,22 @@ struct Config {
 
     // TransportAPI's free plan, and the floor this assumes when nobody said.
     static constexpr int kFreeTierBudget = 30;
+
+    // Plain MQTT, and the topic root every one of this board's topics hangs off.
+    static constexpr int kMqttDefaultPort = 1883;
+    static constexpr const char* kMqttDefaultPrefix = "departurebuddy";
+
+    // Wanted and configured, like every other optional service. A host with the
+    // switch off keeps its settings and starts nothing.
+    bool mqtt_enabled() const { return mqtt_on != 0 && mqtt_host.length(); }
+
+    int mqtt_port_or_default() const {
+        return pick(mqtt_port, kMqttDefaultPort, 1, 65535);
+    }
+
+    String mqtt_base_prefix() const {
+        return mqtt_prefix.length() ? mqtt_prefix : String(kMqttDefaultPrefix);
+    }
 
     // Usable once there is WiFi and at least one service to show. A river-only
     // board is fully provisioned with no API key and no station at all, and a

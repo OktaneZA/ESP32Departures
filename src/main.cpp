@@ -23,6 +23,7 @@
 #include "board.h"
 #include "model.h"
 #include "display.h"
+#include "ha.h"
 #include "input.h"
 #include "rail_api.h"
 #include "bus_api.h"
@@ -496,6 +497,11 @@ void setup() {
     connectWiFi();
     ui::showStartup("Departure Buddy","Syncing clock...");
     syncTime();
+
+    // Home Assistant, if a broker was provisioned. Runs its own task and its
+    // own reconnection; nothing below waits on it, and a board with no broker
+    // does not even open a socket.
+    ha::begin();
 
     // 16 KB stack — mbedTLS handshakes are stack-hungry.
     xTaskCreatePinnedToCore(fetchTask, "fetch", 16384, nullptr, 1, nullptr, 0);

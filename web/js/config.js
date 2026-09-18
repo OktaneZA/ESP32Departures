@@ -18,6 +18,7 @@ export const KEYS = [
   'colfg', 'coldim', 'colwarn', 'colbg', 'rowtime',
   'dwtrain', 'dwbus', 'dwriver', 'dwtube', 'dwclock', 'dwwx',
   'wlat', 'wlon', 'wname', 'nmode',
+  'mqtthost', 'mqttport', 'mqttuser', 'mqttpass', 'mqttprefix', 'mqtten',
 ];
 
 // Port of installer.py's SERVICES. Order matters: it is the order the board
@@ -126,6 +127,14 @@ export function defaultConfig() {
     wxLat: null, wxLon: null, wxName: '',
     nightClock: true,      // show a dimmed clock during blank hours
     rowTime: true,         // show the clock time on bus/boat/Tube rows
+    // Home Assistant over MQTT. Off until a broker is named, and a board with
+    // no broker never opens a socket at all.
+    mqttOn: false,
+    mqtthost: '',
+    mqttport: 1883,
+    mqttuser: '',          // blank = connect anonymously
+    mqttpass: '',
+    mqttprefix: 'departurebuddy',
   };
 }
 
@@ -202,6 +211,14 @@ export function toDeviceConfig(ui) {
     wname: pruned.includes('weather') ? (ui.wxName || '') : '',
     nmode: ui.nightClock ? 1 : 0,
     rowtime: ui.rowTime ? 1 : 0,
+    // Blanked when the integration is off, exactly as busid/buskey are: a board
+    // that is not talking to a broker should not be storing credentials for one.
+    mqtthost: ui.mqttOn ? (ui.mqtthost || '') : '',
+    mqttport: ui.mqttOn ? (ui.mqttport || 1883) : 1883,
+    mqttuser: ui.mqttOn ? (ui.mqttuser || '') : '',
+    mqttpass: ui.mqttOn ? (ui.mqttpass || '') : '',
+    mqttprefix: ui.mqttOn ? (ui.mqttprefix || 'departurebuddy') : 'departurebuddy',
+    mqtten: ui.mqttOn ? 1 : 0,
   };
 }
 

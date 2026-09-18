@@ -15,10 +15,12 @@
 //       tube tubeline tubedir tubename tubeline2 tubedir2 tubeline3 tubedir3
 //       busprov busid buskey busbudget bstart bend bright refr colfg coldim colwarn colbg dwtrain
 //       dwbus dwriver dwtube dwclock dwwx wlat wlon wname nmode rowtime
+//       mqtthost mqttport mqttuser mqttpass mqttprefix mqtten
 
 #include "config.h"
 #include "app_config.h"   // compile-time defaults
 #include "board.h"        // which board this firmware is for
+#include "ha.h"           // MQTT status, for the GET diagnostics
 #include <Preferences.h>
 #include <WiFi.h>
 
@@ -83,6 +85,14 @@ void load_from_nvs(Config& c) {
     c.wx_name     = prefs.getString("wname", "");
     c.night_mode  = prefs.getInt("nmode",  -1);
     c.row_time    = prefs.getInt("rowtime", -1);
+    // Home Assistant / MQTT. Abbreviated for the 15-character NVS limit, the
+    // same way the river and Tube keys are.
+    c.mqtt_host   = prefs.getString("mqhost", "");
+    c.mqtt_user   = prefs.getString("mqusr",  "");
+    c.mqtt_pass   = prefs.getString("mqpass", "");
+    c.mqtt_prefix = prefs.getString("mqpfx",  "");
+    c.mqtt_port   = prefs.getInt("mqport", -1);
+    c.mqtt_on     = prefs.getInt("mqten",  -1);
     prefs.end();
 }
 
@@ -137,6 +147,12 @@ void stage_kv(const String& kv) {
     else if (k == "wname")  g_stage.wx_name     = v;
     else if (k == "nmode")  g_stage.night_mode  = v.toInt();
     else if (k == "rowtime") g_stage.row_time    = v.toInt();
+    else if (k == "mqtthost") g_stage.mqtt_host  = v;
+    else if (k == "mqttport") g_stage.mqtt_port  = v.toInt();
+    else if (k == "mqttuser") g_stage.mqtt_user  = v;
+    else if (k == "mqttpass") g_stage.mqtt_pass  = v;
+    else if (k == "mqttprefix") g_stage.mqtt_prefix = v;
+    else if (k == "mqtten") g_stage.mqtt_on      = v.toInt();
     else { Serial.print("ERR key "); Serial.println(k); return; }
 
     Serial.print("ACK "); Serial.println(k);
@@ -189,6 +205,12 @@ void commit_and_reboot() {
     prefs.putString("wname", g_stage.wx_name);
     prefs.putInt("nmode",  g_stage.night_mode);
     prefs.putInt("rowtime", g_stage.row_time);
+    prefs.putString("mqhost", g_stage.mqtt_host);
+    prefs.putString("mqusr",  g_stage.mqtt_user);
+    prefs.putString("mqpass", g_stage.mqtt_pass);
+    prefs.putString("mqpfx",  g_stage.mqtt_prefix);
+    prefs.putInt("mqport", g_stage.mqtt_port);
+    prefs.putInt("mqten",  g_stage.mqtt_on);
     prefs.end();
     Serial.println("SAVED");
     Serial.flush();
@@ -310,6 +332,19 @@ void handle_line(String line) {
         Serial.print("wname=");  Serial.println(g_cfg.wx_name);
         Serial.print("nmode=");  Serial.println(g_cfg.night_mode);
         Serial.print("rowtime="); Serial.println(g_cfg.row_time);
+        Serial.print("mqtthost="); Serial.println(g_cfg.mqtt_host);
+        Serial.print("mqttport="); Serial.println(g_cfg.mqtt_port_or_default());
+        Serial.print("mqttuser="); Serial.println(g_cfg.mqtt_user);
+        // The broker password is a secret and is reported only as a length,
+        // exactly as the WiFi password and the TransportAPI key are (PROV-07).
+        Serial.print("mqttpasslen="); Serial.println(g_cfg.mqtt_pass.length());
+        Serial.print("mqttprefix="); Serial.println(g_cfg.mqtt_base_prefix());
+        Serial.print("mqtten="); Serial.println(g_cfg.mqtt_on);
+        // Diagnostics rather than settings: the id Home Assistant knows this
+        // board by, and whether the broker connection is actually up. Between
+        // them they turn "it isn't showing up in HA" into a one-line answer.
+        Serial.print("mqttid="); Serial.println(ha::deviceId());
+        Serial.print("mqtt=");   Serial.println(ha::statusWord());
         // Which board this is, so a configurator can pick the right firmware
         // without guessing from a USB vendor id -- that identifies the bridge
         // chip, not the board behind it.

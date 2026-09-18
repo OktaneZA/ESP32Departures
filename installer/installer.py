@@ -46,6 +46,7 @@ CONFIG_KEYS = (
     "colfg", "coldim", "colwarn", "colbg", "rowtime",
     "dwtrain", "dwbus", "dwriver", "dwtube", "dwclock", "dwwx",
     "wlat", "wlon", "wname", "nmode",
+    "mqtthost", "mqttport", "mqttuser", "mqttpass", "mqttprefix", "mqtten",
 )
 
 
@@ -1529,6 +1530,64 @@ DEFAULT_ON_HOUR = 6
 DEFAULT_OFF_HOUR = 22
 
 
+def ask_home_assistant(d, on_board):
+    """Optional MQTT broker, so the board appears in Home Assistant.
+
+    Returns (mqtten, host, port, user, password, prefix). A password of None
+    means "leave whatever the board already has", the same tri-state the WiFi
+    password uses - the board reports only mqttpasslen, never the value, so a
+    blank answer must not wipe a credential the user cannot read back.
+    """
+    stored_host = d.get("mqtthost", "")
+    on_now = str(d.get("mqtten", "")) not in ("0",) and bool(stored_host)
+
+    print("\n  Home Assistant (optional)")
+    print("  Publishes a light for the screen, buttons for panel and refresh,")
+    print("  and sensors for what it is showing - all discovered automatically.")
+    print("  Turning the screen off from HA overrides the hours above, which is")
+    print("  the point if a motion sensor is what decides.")
+    if stored_host:
+        print("  The board currently uses %s." % stored_host)
+    print("    1) No Home Assistant" + ("" if on_now else "   (current)"))
+    print("    2) Publish to an MQTT broker" + ("   (current)" if on_now else ""))
+
+    if ask("  Choose", "2" if on_now else "1").strip() != "2":
+        # Off, but keep the credentials: None leaves them on the board, so
+        # switching back later does not mean retyping a password.
+        return 0, None, None, None, None, None
+
+    host = ask("  Broker address (IP, not a .local name)",
+               stored_host, required=True)
+    port = ask("  Broker port", d.get("mqttport", 1883), cast=int, lo=1, hi=65535)
+    user = ask("  Username (blank = anonymous)", d.get("mqttuser", ""))
+
+    # Only offer "keep" when the board actually has one stored - otherwise the
+    # hint promises something that is not there.
+    has_pass = str(d.get("mqttpasslen", "0")) not in ("", "0")
+    keep = "  (Enter = keep the one already on the board)" if (on_board and has_pass) else ""
+    try:
+        import getpass
+        pw = getpass.getpass("  Broker password%s: " % keep)
+    except Exception:
+        pw = ask("  Broker password%s" % keep, "")
+    password = pw if pw else ((None if has_pass else "") if on_board else "")
+
+    prefix = ask("  Topic prefix", d.get("mqttprefix", "") or "departurebuddy")
+
+    # The PC reaching the broker is suggestive, not conclusive - the board is
+    # what has to reach it - but it catches the two mistakes people actually
+    # make, which are a wrong address and a wrong port.
+    try:
+        import socket
+        with socket.create_connection((host, int(port)), timeout=4):
+            print("  Broker answered on %s:%s." % (host, port))
+    except Exception as exc:
+        print("  ! Could not reach %s:%s from this PC (%s)." % (host, port, type(exc).__name__))
+        print("    Carrying on - check the board's log after it reboots.")
+
+    return 1, host, port, user, password, prefix
+
+
 def ask_screen_hours(d, on_board):
     """Screen on/off hours. Returns (bstart, bend) in the firmware's terms:
     `bstart` is the hour the screen goes OFF, `bend` the hour it comes back ON.
@@ -1602,6 +1661,9 @@ def wizard(defaults=None, on_board=False):
     cfg["refr"] = ask("Refresh seconds", d.get("refr", 60), cast=int, lo=15, hi=3600)
     cfg["bright"] = ask("Brightness (0-255)", d.get("bright", 180), cast=int, lo=0, hi=255)
     cfg["tz"] = ask("Timezone (POSIX TZ; blank = UK default)", d.get("tz", detect_tz()))
+
+    (cfg["mqtten"], cfg["mqtthost"], cfg["mqttport"],
+     cfg["mqttuser"], cfg["mqttpass"], cfg["mqttprefix"]) = ask_home_assistant(d, on_board)
 
     print("\n" + "-" * 44)
     print(" Part 2 of 2  -  what the board shows")
@@ -1679,11 +1741,22 @@ def summary(cfg):
     else:
         masked_key = "(set)"
     pw = "(password unchanged)" if cfg["pass"] is None else "(password set)"
+    if cfg.get("mqtthost"):
+        mq_pw = ("(password unchanged)" if cfg.get("mqttpass") is None
+                 else "(password set)" if cfg.get("mqttpass") else "(no password)")
+        mq = "%s:%s" % (cfg["mqtthost"], cfg.get("mqttport", 1883))
+        if cfg.get("mqttuser"):
+            mq += " as %s" % cfg["mqttuser"]
+        mqtt_row = "    Home Asst   %s  %s" % (mq, mq_pw)
+    else:
+        mqtt_row = ""
     services = parse_mode(cfg.get("mode"))
     labels = {n: l for n, l, _ in SERVICES}
     print("\n  Summary")
     print(f"    Shows       {', '.join(labels[n] for n in services) or 'nothing'}")
     print(f"    WiFi        {cfg['ssid']}  {pw}")
+    if mqtt_row:
+        print(mqtt_row)
     if "train" in services:
         print(f"    API key     {masked_key}")
         print(f"    Station     {cfg['dep']}" + (f" -> {cfg['dest']}" if cfg["dest"] else ""))

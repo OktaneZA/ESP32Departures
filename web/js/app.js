@@ -778,6 +778,9 @@ function problems() {
   if (ui.services.includes('weather') && ui.wxLat === null) {
     out.push('Somewhere to show the weather for — pick a station, stop or pier above.');
   }
+  // Home Assistant is not a service, so it is checked on its own switch rather
+  // than against ui.services. No password check: an anonymous broker is normal.
+  if (ui.mqttOn && !ui.mqtthost) out.push('An MQTT broker address, or turn Home Assistant off.');
   return out;
 }
 
@@ -1098,6 +1101,39 @@ function debounce(fn, ms) {
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
+// ─────────────────────────── Home Assistant ──────────────────────────────
+// Not a service — it shows nothing on the board — so it gets its own switch
+// and its own visibility rule rather than going through syncServiceVisibility.
+function syncMqtt() {
+  $('mqttFields').hidden = !ui.mqttOn;
+  showProblems();
+}
+
+function initMqtt() {
+  $('mqttOn').checked = ui.mqttOn;
+  $('mqtthost').value = ui.mqtthost;
+  $('mqttport').value = ui.mqttport;
+  $('mqttuser').value = ui.mqttuser;
+  $('mqttprefix').value = ui.mqttprefix;
+
+  $('mqttOn').onchange = () => {
+    ui.mqttOn = $('mqttOn').checked;
+    // Opening the switch should not also open the panel's <details>, but
+    // ticking it while collapsed would hide the fields it just revealed.
+    if (ui.mqttOn) $('mqtt').open = true;
+    syncMqtt();
+  };
+  $('mqtthost').oninput = () => { ui.mqtthost = $('mqtthost').value.trim(); showProblems(); };
+  $('mqttport').oninput = () => { ui.mqttport = parseInt($('mqttport').value, 10) || 1883; };
+  $('mqttuser').oninput = () => { ui.mqttuser = $('mqttuser').value.trim(); };
+  // Untrimmed, like the WiFi password: a trailing space may be deliberate.
+  $('mqttpass').oninput = () => { ui.mqttpass = $('mqttpass').value; };
+  $('mqttprefix').oninput = () => {
+    ui.mqttprefix = $('mqttprefix').value.trim() || 'departurebuddy';
+  };
+  syncMqtt();
+}
+
 // ──────────────────────────────── boot ───────────────────────────────────
 $('ssid').oninput = () => { ui.ssid = $('ssid').value; showProblems(); };
 $('pass').oninput = () => { ui.pass = $('pass').value; };
@@ -1110,6 +1146,7 @@ initServices();
 initTrains();
 initBuses();
 initThemes();
+initMqtt();
 initInstall();
 // Populates the board picker from the published manifest. Async and deliberately
 // not awaited: the whole page works without firmware published, and step 2 does
