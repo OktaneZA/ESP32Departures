@@ -40,7 +40,8 @@ CONFIG_KEYS = (
     "ssid", "pass", "key", "dep", "dest", "plat", "tz",
     "bus", "busline", "busprov", "busid", "buskey", "busbudget",
     "river", "riverline", "rivername",
-    "tube", "tubeline", "tubedir", "tubename", "mode",
+    "tube", "tubeline", "tubedir", "tubename",
+    "tubeline2", "tubedir2", "tubeline3", "tubedir3", "mode",
     "bstart", "bend", "bright", "refr",
     "colfg", "coldim", "colwarn", "colbg", "rowtime",
     "dwtrain", "dwbus", "dwriver", "dwtube", "dwclock", "dwwx",
@@ -981,6 +982,20 @@ def _swept_tube_directions():
     return {}
 
 
+def tube_lines_at(station):
+    """The Tube lines serving one station, as [(id, name)].
+
+    TfL lists them on the StopPoint itself, so a second or third screen can
+    offer the others at the station the user already chose (#10). Mirrors
+    web/js/api.js's tubeLinesAt()."""
+    data = _tfl_json("/StopPoint/%s" % station) or {}
+    ids = set()
+    for group in data.get("lineModeGroups", []):
+        if group.get("modeName") == "tube":
+            ids.update(group.get("lineIdentifier", []))
+    return sorted((i, " & ".join(w.capitalize() for w in i.split("-"))) for i in ids)
+
+
 def tube_directions(line_id, station):
     """Directions to offer for one line at one station, as [(name, due_now)].
 
@@ -1134,21 +1149,22 @@ def tube_wizard(defaults, required=False):
     else:
         print("  Live Underground arrivals from TfL's open data - no extra key")
         print("  needed. Enter 's' at the line list to drop the Tube screen.")
-    print("  One line in one direction: a station like King's Cross has six")
-    print("  lines running both ways, and the screen holds a few trains.")
+    print("  One line in one direction per screen: a station like King's Cross")
+    print("  has six lines running both ways, and the screen holds a few trains.")
+    print("  You can add up to three, and the board cycles through them.")
 
     print("\n  Fetching the lines from TfL...")
     line, line_name = choose_from(tube_lines(), "Underground lines",
                                   defaults.get("tubeline", ""),
                                   skippable=not required)
     if not line:
-        return "", "", "", ""
+        return "", "", []
 
     print("\n  Fetching the stations on the %s line..." % line_name)
     stations = tube_stations(line)
     if not stations:
         print("  ! Couldn't reach TfL for the station list. Skipping the Tube screen.")
-        return "", "", "", ""
+        return "", "", []
     station, station_name = choose_from(
         stations, "Stations on the %s line" % line_name, defaults.get("tube", ""))
 
@@ -1156,12 +1172,54 @@ def tube_wizard(defaults, required=False):
     dirs = tube_directions(line, station)
     if not dirs:
         print("  ! No directions found for that station. Skipping the Tube screen.")
-        return "", "", "", ""
+        return "", "", []
     direction, _ = choose_from(
         [(name, "%s  (%s)" % (name, "%d due now" % n if n else "none due right now"))
          for name, n in dirs],
         "Directions at %s" % station_name, defaults.get("tubedir", ""))
 
+    show_next_trains(line, station, direction, station_name, line_name)
+
+    # Up to two more lines at the same station, each its own screen. Acton Town
+    # has the District and the Piccadilly, and a closure on one should still
+    # leave the other on the board (#10).
+    slots = [(line, direction)]
+    available = [(i, n) for i, n in tube_lines_at(station) if i != line]
+    while available and len(slots) < 3:
+        nth = "second" if len(slots) == 1 else "third"
+        print("\n%s also runs the %s line%s."
+              % (station_name, " and the ".join(n for _, n in available),
+                 "" if len(available) == 1 else "s"))
+        extra, extra_name = choose_from(
+            available, "A %s screen at %s (or skip)" % (nth, station_name),
+            skippable=True)
+        if not extra:
+            break
+        dirs = tube_directions(extra, station)
+        if not dirs:
+            print("  ! No directions found for that line here - skipping it.")
+            break
+        extra_dir, _ = choose_from(
+            [(name, "%s  (%s)" % (name, "%d due now" % n if n else "none due right now"))
+             for name, n in dirs],
+            "Directions on the %s at %s" % (extra_name, station_name))
+        show_next_trains(extra, station, extra_dir, station_name, extra_name)
+        slots.append((extra, extra_dir))
+        available = [(i, n) for i, n in available if i != extra]
+
+    if len(slots) > 1:
+        each = max(3, TUBE_DWELL_DEFAULT // len(slots))
+        print("\n%d Tube screens share the Tube's time, about %ds each."
+              % (len(slots), each))
+    return station, station_name, slots
+
+
+# The Tube's dwell as the firmware defaults it, for the "about Ns each" note.
+TUBE_DWELL_DEFAULT = 15
+
+
+def show_next_trains(line, station, direction, station_name, line_name):
+    """Print what that line and direction has due, so a wrong pick shows up here."""
     status, trains = tube_arrivals(line, station, direction)
     if status == "bad_station":
         print("  ! TfL doesn't recognise the %s line at '%s'." % (line_name, station))
@@ -1176,7 +1234,6 @@ def tube_wizard(defaults, required=False):
             print("  (nothing due right now)")
     else:
         print("  (couldn't check trains online - accepting the choice as made)")
-    return station, line, direction, station_name
 
 
 # --------------------------------------------------------------------------- #
@@ -1413,7 +1470,7 @@ SERVICES = [
     ("train", "Trains", "UK-wide, National Rail"),
     ("bus", "Buses", "London free; elsewhere needs a TransportAPI key"),
     ("river", "River boats", "Uber Boat by Thames Clippers + Woolwich Ferry"),
-    ("tube", "London Underground", "One line in one direction - no key needed"),
+    ("tube", "London Underground", "Up to three lines at one station - no key needed"),
     ("weather", "Weather", "Current conditions for a place you choose"),
     ("clock", "Big clock", "The time, filling the screen"),
 ]
@@ -1584,9 +1641,15 @@ def wizard(defaults=None, on_board=False):
 
     if "tube" not in services:
         cfg["tube"] = cfg["tubeline"] = cfg["tubedir"] = cfg["tubename"] = None
+        cfg["tubeline2"] = cfg["tubedir2"] = cfg["tubeline3"] = cfg["tubedir3"] = None
     else:
-        (cfg["tube"], cfg["tubeline"], cfg["tubedir"],
-         cfg["tubename"]) = tube_wizard(d, required=(services == ["tube"]))
+        cfg["tube"], cfg["tubename"], tube_slots = tube_wizard(
+            d, required=(services == ["tube"]))
+        # Slot 1 is the plain keys; slots 2 and 3 repeat only line and direction.
+        pairs = tube_slots + [("", "")] * (3 - len(tube_slots))
+        cfg["tubeline"], cfg["tubedir"] = pairs[0]
+        cfg["tubeline2"], cfg["tubedir2"] = pairs[1]
+        cfg["tubeline3"], cfg["tubedir3"] = pairs[2]
 
     if "weather" not in services:
         cfg["wlat"] = cfg["wlon"] = cfg["wname"] = None

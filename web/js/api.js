@@ -424,6 +424,22 @@ export async function tubeLines() {
 // Every station on one line. Filtered to NaptanMetroStation: the same endpoint
 // also returns platforms, entrances and access areas, and only the station
 // aggregates the whole stop the way the board wants.
+// Which Tube lines serve one station, so a second or third screen can offer the
+// others there (#10). TfL lists them on the StopPoint itself, so this needs no
+// guessing: Acton Town answers district and piccadilly.
+export async function tubeLinesAt(station) {
+  const d = await getJson(`${TFL_API}/StopPoint/${encodeURIComponent(station)}`);
+  const ids = new Set();
+  for (const g of d.lineModeGroups || []) {
+    if (g.modeName === 'tube') for (const id of g.lineIdentifier || []) ids.add(id);
+  }
+  // Full names here: a dropdown has room, unlike the board's header.
+  return [...ids].sort().map((id) => ({
+    id,
+    name: id.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' & '),
+  }));
+}
+
 export async function tubeStations(lineId) {
   const data = await getJson(`${TFL_API}/Line/${encodeURIComponent(lineId)}/StopPoints`);
   const out = [];

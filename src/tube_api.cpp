@@ -193,11 +193,12 @@ String lineLabel(const String& lineId) {
     return out;
 }
 
-Fetch fetchArrivals(const Config& cfg, std::vector<TubeArrival>& out, String& stationName) {
+Fetch fetchArrivals(const Config& cfg, const String& line, const String& dir,
+                    std::vector<TubeArrival>& out, String& stationName) {
     if (WiFi.status() != WL_CONNECTED) return Fetch::Failed;
-    if (cfg.tube_stop.isEmpty() || cfg.tube_line.isEmpty()) return Fetch::Failed;
+    if (cfg.tube_stop.isEmpty() || line.isEmpty()) return Fetch::Failed;
 
-    String url = String(kBase) + escapePath(cfg.tube_line) +
+    String url = String(kBase) + escapePath(line) +
                  "/Arrivals/" + escapePath(cfg.tube_stop);
 
     // TLS: verified against the embedded Mozilla root store (see tls.h). No
@@ -233,11 +234,12 @@ Fetch fetchArrivals(const Config& cfg, std::vector<TubeArrival>& out, String& st
     // never allowed to exhaust the heap.
     WiFiClient& stream = http.getStream();
     String body;
-    // Reserved at the full cap rather than at a guess. This is the largest of
-    // the four feeds, and growing a String past its reservation means holding
-    // the old buffer and the new one at once — a spike the CYD's PSRAM-less
-    // heap should not have to absorb when the ceiling is known up front.
-    body.reserve(TUBE_MAX_RESPONSE);
+    // Reserved once at a realistic size rather than growing into it: enlarging a
+    // String means holding the old buffer and the new one at once, and that
+    // spike is what the CYD's PSRAM-less heap can least afford. The reservation
+    // is the typical large response rather than the 48 KB ceiling, so the common
+    // case commits no more than it needs while the cap still bounds the worst.
+    body.reserve(28672);
     const uint32_t deadline = millis() + 15000;
     bool overflow = false;
     uint8_t buf[512];
@@ -256,7 +258,8 @@ Fetch fetchArrivals(const Config& cfg, std::vector<TubeArrival>& out, String& st
     http.end();
 
     if (overflow) {
-        Serial.printf("[tube] response over %d bytes - discarded\n", TUBE_MAX_RESPONSE);
+        Serial.printf("[tube] %s at %s: response over %d bytes - discarded\n",
+                      line.c_str(), cfg.tube_stop.c_str(), TUBE_MAX_RESPONSE);
         return Fetch::Failed;
     }
     if (body.isEmpty()) {
@@ -300,7 +303,7 @@ Fetch fetchArrivals(const Config& cfg, std::vector<TubeArrival>& out, String& st
         if (platformName.isEmpty()) continue;
 
         String token = platformToken(platformName);
-        if (!cfg.tube_dir.isEmpty() && !equalsIgnoreCase(token, cfg.tube_dir)) continue;
+        if (!dir.isEmpty() && !equalsIgnoreCase(token, dir)) continue;
 
         int32_t eta = p["timeToStation"] | (int32_t)-1;
         if (eta < 0) continue;

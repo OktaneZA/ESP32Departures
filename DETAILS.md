@@ -155,7 +155,12 @@ ESP32Departures/
   King's Cross, where six lines report at once, and the CYD has no PSRAM to hold
   it — one line at a time caps the worst case near 19 KB. It is also a legibility
   one, since the screen holds three or four trains. So a Tube screen is one line,
-  one station and one direction, all three required.
+  one station and one direction, all three required. One station can carry up to
+  three such line+direction pairs, each its own screen, so Acton Town shows the
+  District and the Piccadilly in turn and a closure on one leaves the other
+  running. They share the station and its name; only the line and direction
+  repeat, and each polls and fails independently. The Tube's dwell is the time
+  the station gets as a whole, split between them.
   The direction filter matches TfL's `platformName` ("Northbound - Platform 3"),
   not its `direction` field, which is empty for the whole Circle line. Because
   the line is already named in the header, each row's route column carries the

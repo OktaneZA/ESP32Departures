@@ -112,9 +112,13 @@
 // -----------------------------------------------------------------------------
 // London Underground arrivals (TfL Unified API) — optional fourth screen.
 //
-// The same open feed as the river bus, asked one line at a time. Only active
-// when a station, a line and a direction are all provisioned; see tube_api.cpp
-// for why all three are required rather than optional.
+// The same open feed as the river bus, asked one line at a time. A screen is
+// only active when a station, a line and a direction are all provisioned; see
+// tube_api.cpp for why all three are required rather than optional.
+//
+// One station can carry up to Config::kTubeSlots line+direction pairs, each
+// polled and backed off independently. TUBE_SCREEN_SECONDS is the time the
+// station gets as a whole, divided between however many are set.
 // -----------------------------------------------------------------------------
 
 // How many Tube arrivals to show (see BOARD_LIST_ROWS).
@@ -132,10 +136,16 @@
 // an hour; a wider window would only admit predictions too vague to trust.
 #define TUBE_MAX_ETA_MINUTES  20
 
-// Hard cap on the TfL response we will buffer (bytes). The measured worst case
-// across the network is ~19 KB (Piccadilly at King's Cross); anything larger is
+// Hard cap on the TfL response we will buffer (bytes). Anything larger is
 // treated as a failed fetch rather than being allowed to exhaust the heap.
-#define TUBE_MAX_RESPONSE     24576
+//
+// 24 KB was set from too small a sample and was simply wrong: measured live,
+// Euston on the Northern answers with 34,057 bytes and Acton Town on the
+// Piccadilly with 26,703, so both of those screens failed on every poll. The
+// driver is not interchange size but how many trains are predicted at once, so
+// a branch junction can beat King's Cross (13,607). 48 KB clears the worst seen
+// with room to spare, and is 16 KB above the river feed's long-standing 32 KB.
+#define TUBE_MAX_RESPONSE     49152
 
 // Dump the parsed Tube predictions to Serial once per poll.
 #define RAW_TUBE_DEBUG        0

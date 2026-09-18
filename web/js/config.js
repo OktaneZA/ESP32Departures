@@ -12,7 +12,8 @@
 export const KEYS = [
   'ssid', 'pass', 'key', 'dep', 'dest', 'plat', 'tz',
   'bus', 'busline', 'busprov', 'busid', 'buskey', 'busbudget', 'river', 'riverline', 'rivername',
-  'tube', 'tubeline', 'tubedir', 'tubename', 'mode',
+  'tube', 'tubeline', 'tubedir', 'tubename',
+  'tubeline2', 'tubedir2', 'tubeline3', 'tubedir3', 'mode',
   'bstart', 'bend', 'bright', 'refr',
   'colfg', 'coldim', 'colwarn', 'colbg', 'rowtime',
   'dwtrain', 'dwbus', 'dwriver', 'dwtube', 'dwclock', 'dwwx',
@@ -25,7 +26,7 @@ export const SERVICES = [
   { id: 'train', label: 'Trains', note: 'UK-wide, National Rail' },
   { id: 'bus', label: 'Buses', note: 'London free; elsewhere needs a TransportAPI key' },
   { id: 'river', label: 'River boats', note: 'Uber Boat by Thames Clippers + Woolwich Ferry' },
-  { id: 'tube', label: 'London Underground', note: 'One line in one direction — no key needed' },
+  { id: 'tube', label: 'London Underground', note: 'Up to three lines at one station — no key needed' },
   { id: 'weather', label: 'Weather', note: 'For wherever you picked above — no extra setup' },
   { id: 'clock', label: 'Big clock', note: 'The time, filling the screen' },
 ];
@@ -102,6 +103,8 @@ export function defaultConfig() {
     tz: tz === 'Europe/London' ? 'GMT0BST,M3.5.0/1,M10.5.0' : '',
     bus: '', busline: '', river: '', riverline: '', rivername: '',
     tube: '', tubeline: '', tubedir: '', tubename: '',
+    // Up to two more line+direction pairs at that same station (#10).
+    tubeline2: '', tubedir2: '', tubeline3: '', tubedir3: '',
     // Which bus feed, and the credentials the national one needs. TfL is the
     // default because it is the one that needs no account at all.
     busprov: 'tfl', busid: '', buskey: '',
@@ -174,6 +177,10 @@ export function toDeviceConfig(ui) {
     tubeline: pruned.includes('tube') ? (ui.tubeline || '') : '',
     tubedir: pruned.includes('tube') ? (ui.tubedir || '') : '',
     tubename: pruned.includes('tube') ? (ui.tubename || '') : '',
+    tubeline2: pruned.includes('tube') ? (ui.tubeline2 || '') : '',
+    tubedir2: pruned.includes('tube') ? (ui.tubedir2 || '') : '',
+    tubeline3: pruned.includes('tube') ? (ui.tubeline3 || '') : '',
+    tubedir3: pruned.includes('tube') ? (ui.tubedir3 || '') : '',
     mode: buildMode(pruned),
     bstart: blanking ? ui.offHour : -1,
     bend: blanking ? ui.onHour : -1,

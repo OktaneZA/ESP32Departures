@@ -12,7 +12,7 @@
 //   HASH                 -> md5/size of the running firmware, then END
 //
 // Keys: ssid pass key dep dest plat tz bus busline river riverline rivername mode
-//       tube tubeline tubedir tubename
+//       tube tubeline tubedir tubename tubeline2 tubedir2 tubeline3 tubedir3
 //       busprov busid buskey busbudget bstart bend bright refr colfg coldim colwarn colbg dwtrain
 //       dwbus dwriver dwtube dwclock dwwx wlat wlon wname nmode rowtime
 
@@ -56,6 +56,10 @@ void load_from_nvs(Config& c) {
     c.tube_line   = prefs.getString("tubeln", "");
     c.tube_dir    = prefs.getString("tubedir", "");
     c.tube_name   = prefs.getString("tubenm", "");
+    c.tube_line2  = prefs.getString("tubeln2", "");
+    c.tube_dir2   = prefs.getString("tubedir2", "");
+    c.tube_line3  = prefs.getString("tubeln3", "");
+    c.tube_dir3   = prefs.getString("tubedir3", "");
     c.mode        = prefs.getString("mode", "");   // "" = train+bus (pre-mode configs)
     c.blank_start = prefs.getInt("bstart", -1);
     c.blank_end   = prefs.getInt("bend",   -1);
@@ -109,6 +113,10 @@ void stage_kv(const String& kv) {
     else if (k == "tubeline") g_stage.tube_line = v;
     else if (k == "tubedir") g_stage.tube_dir  = v;
     else if (k == "tubename") g_stage.tube_name = v;
+    else if (k == "tubeline2") g_stage.tube_line2 = v;
+    else if (k == "tubedir2") g_stage.tube_dir2  = v;
+    else if (k == "tubeline3") g_stage.tube_line3 = v;
+    else if (k == "tubedir3") g_stage.tube_dir3  = v;
     else if (k == "mode")   g_stage.mode       = v;
     else if (k == "bstart") g_stage.blank_start = v.toInt();
     else if (k == "bend")   g_stage.blank_end   = v.toInt();
@@ -157,6 +165,10 @@ void commit_and_reboot() {
     prefs.putString("tubeln", g_stage.tube_line);
     prefs.putString("tubedir", g_stage.tube_dir);
     prefs.putString("tubenm", g_stage.tube_name);
+    prefs.putString("tubeln2", g_stage.tube_line2);
+    prefs.putString("tubedir2", g_stage.tube_dir2);
+    prefs.putString("tubeln3", g_stage.tube_line3);
+    prefs.putString("tubedir3", g_stage.tube_dir3);
     prefs.putString("mode", g_stage.mode);
     prefs.putInt("bstart", g_stage.blank_start);
     prefs.putInt("bend",   g_stage.blank_end);
@@ -267,6 +279,10 @@ void handle_line(String line) {
         Serial.print("tubeline="); Serial.println(g_cfg.tube_line);
         Serial.print("tubedir="); Serial.println(g_cfg.tube_dir);
         Serial.print("tubename="); Serial.println(g_cfg.tube_name);
+        Serial.print("tubeline2="); Serial.println(g_cfg.tube_line2);
+        Serial.print("tubedir2="); Serial.println(g_cfg.tube_dir2);
+        Serial.print("tubeline3="); Serial.println(g_cfg.tube_line3);
+        Serial.print("tubedir3="); Serial.println(g_cfg.tube_dir3);
         // Report the legacy word as the set it means, so the installer only
         // ever has to understand the comma-separated form.
         Serial.print("mode=");   Serial.println(

@@ -10,7 +10,8 @@ the board's built-in colour LCD — no host computer, server, or cloud service.
 It can also show **live London bus arrivals** for one bus stop, from TfL's open
 Countdown feed; **live river boat sailings** for one Thames pier — Uber Boat by
 Thames Clippers and the Woolwich Ferry; and **live London Underground arrivals**
-for one line at one station in one direction — both from TfL's Unified API.
+for up to three lines at one station, each in one direction — both from TfL's
+Unified API.
 Every service is optional and independent: the board shows any combination and
 cycles through whichever are enabled.
 
@@ -341,7 +342,8 @@ There are 26 piers across the four lines. The installer fetches them live from
 
 Used only when the user configures a Tube station. The same open
 [TfL Unified API](https://api.tfl.gov.uk/) the river screen uses, asked a
-narrower question: **one line, at one station, in one direction**.
+narrower question: **one line, at one station, in one direction** — asked up to
+three times over, for one station's worth of lines.
 
 > **Why per line rather than per station.** The obvious endpoint is the river
 > client's `/StopPoint/{naptan}/Arrivals`, and it works — but measured against
@@ -396,7 +398,9 @@ but the live feed, so the pickers offer a table swept from the whole network
 |---|---|
 | TUBE-01 | HTTPS enforced for the TfL endpoint; no HTTP fallback |
 | TUBE-02 | Arrivals are requested **per line**, not per station, so the worst-case response stays inside `TUBE_MAX_RESPONSE`. Measured: 71 KB station-wide at King's Cross versus 19 KB for its busiest single line |
-| TUBE-03 | Station, line and direction are all **required**. A partial config enables no Tube screen rather than an unusable one |
+| TUBE-03 | Station, line and direction are all **required** for a screen. A partial config enables no Tube screen rather than an unusable one |
+| TUBE-22 | One station may carry **up to three line+direction pairs**, each its own screen in the rotation. Acton Town has the District and the Piccadilly, and a closure on one should still leave the other on the board (#10). The station and its name are shared; only the line and direction repeat. Each slot polls, fails and goes stale independently, so a line TfL rejects withholds one screen rather than the Tube entirely |
+| TUBE-23 | `dwtube` is the time the **station** gets, divided between its configured screens: one minute across three lines is twenty seconds each, floored at 3 s so a screen cannot strobe |
 | TUBE-04 | The direction filter matches the `platformName` token, never `direction` — the latter is empty for the whole Circle line |
 | TUBE-05 | `timeToStation` is used directly as the countdown, so the screen is correct even before NTP has synced |
 | TUBE-06 | Response parsed with an ArduinoJson **filter**, so only the six rendered fields are ever allocated |
@@ -452,6 +456,8 @@ setup" having silently lost its WiFi, API key and station.
 | `tubeline` | No | - | TfL line id, e.g. `victoria`. **Required** with `tube` (TUBE-03). NVS key `tubeln` |
 | `tubedir` | No | - | Platform token, e.g. `Northbound` or `Platform 2`. **Required** with `tube` (TUBE-03/04). NVS key `tubedir` |
 | `tubename` | No | - | Friendly station name, as `rivername` is for a pier (TUBE-17). NVS key `tubenm` |
+| `tubeline2` / `tubedir2` | No | - | A second line and direction **at the same station**, its own screen (TUBE-22). NVS keys `tubeln2`, `tubedir2` |
+| `tubeline3` / `tubedir3` | No | - | A third, likewise. NVS keys `tubeln3`, `tubedir3` |
 | `bstart` | No | `-1` | Screen-blank start hour — when the screen goes OFF (−1 = never blank). The installer offers `22` on a new board |
 | `bend` | No | `-1` | Screen-blank end hour — when the screen comes back ON (−1 = never blank). The installer offers `6` on a new board |
 | `bright` | No | `180` | Backlight brightness (0–255) |

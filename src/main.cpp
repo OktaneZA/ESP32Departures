@@ -59,14 +59,17 @@ static bool     g_riverHaveData = false;
 static uint32_t g_riverFetchedMs = 0;
 static uint32_t g_riverEpoch = 0;
 
-// Tube screen state (only touched when a station, line and direction are set).
-static std::vector<TubeArrival> g_tube;
-static String   g_tubeStationName;
-static int      g_tubeErrCount = 0;
-static bool     g_badTubeStation = false;  // line or station rejected by TfL (HTTP 404)
-static bool     g_tubeHaveData = false;
-static uint32_t g_tubeFetchedMs = 0;
-static uint32_t g_tubeEpoch = 0;
+// Tube screen state, one set per slot: a station can carry up to three
+// line+direction pairs, and each keeps its own errors and staleness, so a line
+// closed for works withholds only its own screen (#10).
+static constexpr int TUBE_SLOTS = Config::kTubeSlots;
+static std::vector<TubeArrival> g_tube[TUBE_SLOTS];
+static String   g_tubeStationName[TUBE_SLOTS];
+static int      g_tubeErrCount[TUBE_SLOTS] = {0};
+static bool     g_badTubeStation[TUBE_SLOTS] = {false};   // rejected by TfL
+static bool     g_tubeHaveData[TUBE_SLOTS] = {false};
+static uint32_t g_tubeFetchedMs[TUBE_SLOTS] = {0};
+static uint32_t g_tubeEpoch[TUBE_SLOTS] = {0};
 
 // Weather screen state (only touched when a position is configured).
 static Weather  g_wx;
@@ -256,44 +259,47 @@ static uint32_t fetchRiverOnce() {
 }
 
 // Poll the TfL Tube feed once and publish the result. Returns how long to wait.
-static uint32_t fetchTubeOnce() {
+static uint32_t fetchTubeOnce(int slot) {
+    const Config& c = cfg::get();
+    const String line = c.tube_line_at(slot);
+    const String dir = c.tube_dir_at(slot);
     std::vector<TubeArrival> trains;
     String stationName;
-    tube::Fetch st = tube::fetchArrivals(cfg::get(), trains, stationName);
+    tube::Fetch st = tube::fetchArrivals(c, line, dir, trains, stationName);
     bool ok = (st == tube::Fetch::Ok);
 
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     if (ok) {
-        g_tube = trains;
-        g_tubeStationName = stationName;
-        g_tubeErrCount = 0;
-        g_badTubeStation = false;
-        g_tubeHaveData = true;
-        g_tubeFetchedMs = millis();
+        g_tube[slot] = trains;
+        g_tubeStationName[slot] = stationName;
+        g_tubeErrCount[slot] = 0;
+        g_badTubeStation[slot] = false;
+        g_tubeHaveData[slot] = true;
+        g_tubeFetchedMs[slot] = millis();
     } else if (st == tube::Fetch::BadStation) {
-        g_badTubeStation = true;   // config error — drop the tube screen
-        g_tubeHaveData = false;
-        g_tubeErrCount = 0;
+        g_badTubeStation[slot] = true;   // config error — drop this screen only
+        g_tubeHaveData[slot] = false;
+        g_tubeErrCount[slot] = 0;
     } else {
-        g_tubeErrCount++;          // keep last-good trains on screen (stale)
-        g_badTubeStation = false;
+        g_tubeErrCount[slot]++;          // keep last-good trains on screen (stale)
+        g_badTubeStation[slot] = false;
     }
-    g_tubeEpoch++;
-    int fails = g_tubeErrCount;
+    g_tubeEpoch[slot]++;
+    int fails = g_tubeErrCount[slot];
     xSemaphoreGive(g_mutex);
 
     if (ok) {
-        Serial.printf("[tube] ok: %d trains at %s\n", (int)trains.size(), stationName.c_str());
+        Serial.printf("[tube%d] ok: %d trains at %s (%s %s)\n", slot + 1,
+                      (int)trains.size(), stationName.c_str(), line.c_str(), dir.c_str());
         return TUBE_REFRESH_SECONDS * 1000UL;
     }
     if (st == tube::Fetch::BadStation) {
-        Serial.printf("[tube] unknown line/station '%s'/'%s' - tube screen disabled "
-                      "until reconfigured\n",
-                      cfg::get().tube_line.c_str(), cfg::get().tube_stop.c_str());
+        Serial.printf("[tube%d] unknown line/station '%s'/'%s' - this screen disabled "
+                      "until reconfigured\n", slot + 1, line.c_str(), c.tube_stop.c_str());
         return 300000;   // a wrong code will not fix itself; check back rarely
     }
     uint32_t wait = backoffMs(fails);
-    Serial.printf("[tube] failed (%d) - retry in %us\n", fails, wait / 1000);
+    Serial.printf("[tube%d] failed (%d) - retry in %us\n", slot + 1, fails, wait / 1000);
     return wait;
 }
 
@@ -351,7 +357,8 @@ static void fetchTask(void*) {
     uint32_t nextTrain = millis();
     uint32_t nextBus = millis();
     uint32_t nextRiver = millis();
-    uint32_t nextTube = millis();
+    uint32_t nextTube[TUBE_SLOTS];
+    for (auto& t : nextTube) t = millis();
     uint32_t nextWx = millis();
 
     for (;;) {
@@ -367,8 +374,11 @@ static void fetchTask(void*) {
         if (cfg::get().river_enabled() && (int32_t)(millis() - nextRiver) >= 0) {
             nextRiver = millis() + fetchRiverOnce();
         }
-        if (cfg::get().tube_enabled() && (int32_t)(millis() - nextTube) >= 0) {
-            nextTube = millis() + fetchTubeOnce();
+        for (int slot = 0; slot < TUBE_SLOTS; ++slot) {
+            if (cfg::get().tube_slot_enabled(slot) &&
+                (int32_t)(millis() - nextTube[slot]) >= 0) {
+                nextTube[slot] = millis() + fetchTubeOnce(slot);
+            }
         }
         if (cfg::get().weather_enabled() && (int32_t)(millis() - nextWx) >= 0) {
             nextWx = millis() + fetchWeatherOnce();
@@ -408,6 +418,16 @@ void setup() {
     Serial.printf("[boot] screens: train=%d bus=%d river=%d tube=%d weather=%d clock=%d\n",
                   c.train_enabled(), c.bus_enabled(), c.river_enabled(),
                   c.tube_enabled(), c.weather_enabled(), c.clock_enabled());
+    if (c.tube_slots()) {
+        Serial.printf("[boot] tube: %d screen(s) at %s\n",
+                      c.tube_slots(), c.tube_stop.c_str());
+        for (int i = 0; i < Config::kTubeSlots; ++i) {
+            if (c.tube_slot_enabled(i)) {
+                Serial.printf("[boot]   %d: %s %s\n", i + 1,
+                              c.tube_line_at(i).c_str(), c.tube_dir_at(i).c_str());
+            }
+        }
+    }
     Serial.printf("[boot] weather at %d,%d (%s)\n",
                   c.wx_lat, c.wx_lon, c.wx_name.c_str());
 
@@ -456,7 +476,15 @@ void setup() {
 // rather than showing an empty departure board for a station that was never
 // configured.
 // ---------------------------------------------------------------------------
-enum class Screen { Train, Bus, River, Tube, Clock, Weather };
+enum class Screen { Train, Bus, River, Tube, Tube2, Tube3, Clock, Weather };
+
+// Which Tube slot a screen shows, or -1 if it is not a Tube screen.
+static int tubeSlotOf(Screen s) {
+    if (s == Screen::Tube) return 0;
+    if (s == Screen::Tube2) return 1;
+    if (s == Screen::Tube3) return 2;
+    return -1;
+}
 
 // How long a screen holds before the rotation moves on. The provisioned value
 // wins when there is one; otherwise the app_config.h default applies, so a board
@@ -474,8 +502,17 @@ static uint32_t dwellMs(Screen s) {
             seconds = Config::pick(c.dwell_river, RIVER_SCREEN_SECONDS, 3, 300);
             break;
         case Screen::Tube:
-            seconds = Config::pick(c.dwell_tube, TUBE_SCREEN_SECONDS, 3, 300);
+        case Screen::Tube2:
+        case Screen::Tube3: {
+            // The Tube's dwell is the time the station gets as a whole, shared
+            // between however many line+direction screens are configured: a
+            // minute across three lines is twenty seconds each.
+            int total = Config::pick(c.dwell_tube, TUBE_SCREEN_SECONDS, 3, 300);
+            int slots = c.tube_slots() > 0 ? c.tube_slots() : 1;
+            seconds = total / slots;
+            if (seconds < 3) seconds = 3;   // a sub-3s screen strobes
             break;
+        }
         case Screen::Clock:
             seconds = Config::pick(c.dwell_clock, CLOCK_SCREEN_SECONDS, 3, 300);
             break;
@@ -517,12 +554,12 @@ void loop() {
     static bool riverReady = false;
     static uint32_t riverFetchedMs = 0;
 
-    static uint32_t lastTubeEpoch = 0xFFFFFFFF;
-    static std::vector<TubeArrival> tubeTrains;
-    static String tubeStation;
-    static int tubeErr = 0;
-    static bool tubeReady = false;
-    static uint32_t tubeFetchedMs = 0;
+    static uint32_t lastTubeEpoch[TUBE_SLOTS] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+    static std::vector<TubeArrival> tubeTrains[TUBE_SLOTS];
+    static String tubeStation[TUBE_SLOTS];
+    static int tubeErr[TUBE_SLOTS] = {0};
+    static bool tubeReady[TUBE_SLOTS] = {false};
+    static uint32_t tubeFetchedMs[TUBE_SLOTS] = {0};
 
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     uint32_t epoch = g_epoch;
@@ -552,14 +589,16 @@ void loop() {
         riverPier = g_riverPierName;
         lastRiverEpoch = riverEpoch;
     }
-    uint32_t tubeEpoch = g_tubeEpoch;
-    tubeErr = g_tubeErrCount;
-    tubeReady = g_tubeHaveData;
-    tubeFetchedMs = g_tubeFetchedMs;
-    if (tubeEpoch != lastTubeEpoch) {
-        tubeTrains = g_tube;
-        tubeStation = g_tubeStationName;
-        lastTubeEpoch = tubeEpoch;
+    for (int slot = 0; slot < TUBE_SLOTS; ++slot) {
+        uint32_t tubeEpoch = g_tubeEpoch[slot];
+        tubeErr[slot] = g_tubeErrCount[slot];
+        tubeReady[slot] = g_tubeHaveData[slot];
+        tubeFetchedMs[slot] = g_tubeFetchedMs[slot];
+        if (tubeEpoch != lastTubeEpoch[slot]) {
+            tubeTrains[slot] = g_tube[slot];
+            tubeStation[slot] = g_tubeStationName[slot];
+            lastTubeEpoch[slot] = tubeEpoch;
+        }
     }
     uint32_t wxEpoch = g_wxEpoch;
     wxErr = g_wxErrCount;
@@ -616,12 +655,17 @@ void loop() {
 
     // Which screens are in the rotation this frame, in a fixed order so the
     // cycle stays predictable as feeds come and go.
-    Screen active[6];
+    Screen active[5 + Config::kTubeSlots];
     int nActive = 0;
     if (c.train_enabled())               active[nActive++] = Screen::Train;
     if (c.bus_enabled() && busReady)     active[nActive++] = Screen::Bus;
     if (c.river_enabled() && riverReady) active[nActive++] = Screen::River;
-    if (c.tube_enabled() && tubeReady)   active[nActive++] = Screen::Tube;
+    for (int slot = 0; slot < TUBE_SLOTS; ++slot) {
+        if (c.tube_slot_enabled(slot) && tubeReady[slot]) {
+            active[nActive++] = slot == 0 ? Screen::Tube
+                              : slot == 1 ? Screen::Tube2 : Screen::Tube3;
+        }
+    }
     if (c.weather_enabled() && wxReady)  active[nActive++] = Screen::Weather;
     // The clock needs no feed, so unlike the others it is ready the moment it
     // is asked for — and it is what a board with nothing else shows.
@@ -673,7 +717,12 @@ void loop() {
         String label;
         if (c.bus_enabled() && busErr > worst) { worst = busErr; label = c.bus_stop; }
         if (c.river_enabled() && riverErr > worst) { worst = riverErr; label = c.river_name.length() ? c.river_name : c.river_pier; }
-        if (c.tube_enabled() && tubeErr > worst) { worst = tubeErr; label = c.tube_name.length() ? c.tube_name : c.tube_stop; }
+        for (int slot = 0; slot < TUBE_SLOTS; ++slot) {
+            if (c.tube_slot_enabled(slot) && tubeErr[slot] > worst) {
+                worst = tubeErr[slot];
+                label = c.tube_name.length() ? c.tube_name : c.tube_stop;
+            }
+        }
         if (worst >= 3) {
             ui::renderConnectivityWarning(label, worst);
         } else {
@@ -683,9 +732,11 @@ void loop() {
         ui::renderBusBoard(bus, busStop, c.bus_line, millis() - busFetchedMs, busErr);
     } else if (screen == Screen::River) {
         ui::renderRiverBoard(river, riverPier, c.river_line, millis() - riverFetchedMs, riverErr);
-    } else if (screen == Screen::Tube) {
-        ui::renderTubeBoard(tubeTrains, tubeStation, tube::lineLabel(c.tube_line),
-                            millis() - tubeFetchedMs, tubeErr);
+    } else if (tubeSlotOf(screen) >= 0) {
+        const int slot = tubeSlotOf(screen);
+        ui::renderTubeBoard(tubeTrains[slot], tubeStation[slot],
+                            tube::lineLabel(c.tube_line_at(slot)),
+                            millis() - tubeFetchedMs[slot], tubeErr[slot]);
     } else if (screen == Screen::Weather) {
         ui::renderWeatherBoard(wx, c.wx_name.length() ? c.wx_name : String("Weather"), wxErr);
     } else if (screen == Screen::Clock) {

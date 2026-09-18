@@ -30,7 +30,10 @@ enum class Fetch {
 // On Ok: fills `out` with up to MAX_TUBE_ARRIVALS trains sorted soonest-first
 // and sets `stationName`. On Failed/BadStation: leaves outputs untouched so
 // stale data persists.
-Fetch fetchArrivals(const Config& cfg, std::vector<TubeArrival>& out, String& stationName);
+// `line` and `dir` are passed in rather than read from the config, because one
+// station may carry up to three of them, each its own screen (#10).
+Fetch fetchArrivals(const Config& cfg, const String& line, const String& dir,
+                    std::vector<TubeArrival>& out, String& stationName);
 
 // The screen's label for a TfL line id: "victoria" -> "Victoria", and
 // "hammersmith-city" -> "H&C". The header sets this in the small font beside a

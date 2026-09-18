@@ -3,3 +3,6 @@
 # Real credentials live in secrets.h — never commit them.
 include/secrets.h
 __pycache__/
+
+# Playwright MCP session artifacts (snapshots, console logs) from web UI testing
+.playwright-mcp/

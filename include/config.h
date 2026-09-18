@@ -25,6 +25,13 @@ struct Config {
     String tube_line;    // TfL line id, e.g. "victoria"
     String tube_dir;     // platform token, e.g. "Northbound" or "Platform 2"
     String tube_name;    // friendly station name from the installer, e.g. "King's Cross"
+    // Two more line+direction pairs at that same station, each its own screen.
+    // Acton Town has the District and the Piccadilly, and a closure on one
+    // should still leave the other on the board (#10).
+    String tube_line2;
+    String tube_dir2;
+    String tube_line3;
+    String tube_dir3;
     String mode;         // comma-separated set, e.g. "train,bus,river" (see wants())
     int    blank_start = -1;   // screen-blank start hour (-1 = off)
     int    blank_end   = -1;   // screen-blank end hour (-1 = off)
@@ -130,9 +137,31 @@ struct Config {
     // and direction are what keep the answer small enough to hold and short
     // enough to read. A partial config would put an unusable screen in the
     // rotation, so it puts none there instead.
-    bool tube_enabled() const {
-        return wants_tube() && tube_stop.length() && tube_line.length() && tube_dir.length();
+    // How many line+direction pairs the Tube screen may hold at one station.
+    static constexpr int kTubeSlots = 3;
+
+    String tube_line_at(int slot) const {
+        return slot == 1 ? tube_line2 : slot == 2 ? tube_line3 : tube_line;
     }
+    String tube_dir_at(int slot) const {
+        return slot == 1 ? tube_dir2 : slot == 2 ? tube_dir3 : tube_dir;
+    }
+
+    // A slot needs the station (shared) and its own line and direction, for the
+    // reason one Tube screen always did: the line keeps the response small and
+    // the direction keeps it short enough to read.
+    bool tube_slot_enabled(int slot) const {
+        return wants_tube() && tube_stop.length() &&
+               tube_line_at(slot).length() && tube_dir_at(slot).length();
+    }
+
+    int tube_slots() const {
+        int n = 0;
+        for (int i = 0; i < kTubeSlots; ++i) if (tube_slot_enabled(i)) ++n;
+        return n;
+    }
+
+    bool tube_enabled() const { return tube_slots() > 0; }
 
     // The clock needs nothing but the wish for it.
     bool clock_enabled() const { return wants_clock(); }

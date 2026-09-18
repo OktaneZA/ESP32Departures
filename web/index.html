@@ -188,10 +188,43 @@
     <div class="field">
       <label for="tubeDirSelect">Direction</label>
       <select id="tubeDirSelect" disabled><option value="">Choose a station first…</option></select>
-      <p class="hint">One line in one direction, because a station like King’s Cross
-         has six lines running both ways and the screen holds three trains. Needs no
-         key, like the bus and river feeds.</p>
+      <p class="hint">One line in one direction per screen, because a station like
+         King’s Cross has six lines running both ways and the screen holds three
+         trains. Add up to two more below and the board cycles through them,
+         splitting the Tube’s time between them. Needs no key, like the bus and
+         river feeds.</p>
       <p class="chosen" id="tubeChosen" hidden></p>
+    </div>
+
+    <!-- Slots 2 and 3: more lines at the same station (#10). Hidden until a
+         station is chosen, since the lines on offer come from that station. -->
+    <div id="tubeExtraWrap" hidden>
+      <label class="group-label">Also show another line at this station</label>
+
+      <div class="grid-2" id="tubeSlot2">
+        <div class="field">
+          <label for="tubeLineSelect2">Second line</label>
+          <select id="tubeLineSelect2"><option value="">None</option></select>
+        </div>
+        <div class="field">
+          <label for="tubeDirSelect2">Direction</label>
+          <select id="tubeDirSelect2" disabled><option value="">Pick a line first…</option></select>
+        </div>
+      </div>
+
+      <div class="grid-2" id="tubeSlot3" hidden>
+        <div class="field">
+          <label for="tubeLineSelect3">Third line</label>
+          <select id="tubeLineSelect3"><option value="">None</option></select>
+        </div>
+        <div class="field">
+          <label for="tubeDirSelect3">Direction</label>
+          <select id="tubeDirSelect3" disabled><option value="">Pick a line first…</option></select>
+        </div>
+      </div>
+
+      <p class="hint" id="tubeSplitHint"></p>
+      <p class="chosen" id="tubeChosen2" hidden></p>
     </div>
   </div>
   <!-- Weather -->

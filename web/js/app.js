@@ -432,7 +432,9 @@ async function loadTubeStations() {
     ui.tube = s ? s.id : '';
     ui.tubename = s ? s.name : '';
     if (s && s.lat != null && s.lon != null) setWeatherFrom(s.lat, s.lon, s.name);
+    ui.tubeline2 = ui.tubedir2 = ui.tubeline3 = ui.tubedir3 = '';
     loadTubeDirections();
+    loadTubeExtraSlots();
   };
 }
 
@@ -454,9 +456,111 @@ async function loadTubeDirections() {
     sel.append(new Option(`${d.name} — ${note}`, d.name));
   }
   sel.disabled = false;
-  if (dirs.length === 1) { sel.value = dirs[0].name; ui.tubedir = dirs[0].name; }
-  sel.onchange = () => { ui.tubedir = sel.value; previewTube(); };
+  // Default to the first direction rather than leaving the panel half-filled:
+  // a station with no direction is a screen the board will not run (TUBE-03),
+  // and the slots below already behave this way.
+  const keep = dirs.find((d) => d.name === ui.tubedir) || dirs[0];
+  if (keep) { sel.value = keep.name; ui.tubedir = keep.name; }
+  sel.onchange = () => {
+    ui.tubedir = sel.value;
+    updateTubeSplitHint();
+    previewTube();
+  };
+  updateTubeSplitHint();
   previewTube();
+}
+
+// Slots 2 and 3: more lines at the same station. The lines on offer are the
+// ones TfL says serve it, minus whatever the slots above already show, so the
+// same line cannot be picked twice.
+async function loadTubeExtraSlots() {
+  const wrap = $('tubeExtraWrap');
+  if (!ui.tube) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+
+  let lines = [];
+  try {
+    lines = await api.tubeLinesAt(ui.tube);
+  } catch {
+    wrap.hidden = true;                 // cannot offer what we cannot list
+    return;
+  }
+
+  const fill = (slot) => {
+    const sel = $('tubeLineSelect' + slot);
+    const taken = [ui.tubeline, slot === 3 ? ui.tubeline2 : null].filter(Boolean);
+    const chosen = slot === 2 ? ui.tubeline2 : ui.tubeline3;
+    sel.innerHTML = '<option value="">None</option>';
+    for (const l of lines) {
+      if (taken.includes(l.id) && l.id !== chosen) continue;
+      sel.append(new Option(l.name, l.id));
+    }
+    sel.value = chosen || '';
+    sel.onchange = () => {
+      if (slot === 2) { ui.tubeline2 = sel.value; ui.tubedir2 = ''; }
+      else { ui.tubeline3 = sel.value; ui.tubedir3 = ''; }
+      loadTubeExtraDirections(slot);
+      fill(slot === 2 ? 3 : 2);         // the other slot must not offer it now
+    };
+  };
+  fill(2);
+  fill(3);
+  $('tubeSlot3').hidden = !ui.tubeline2;   // a third only after a second
+  await loadTubeExtraDirections(2);
+  await loadTubeExtraDirections(3);
+  updateTubeSplitHint();
+}
+
+async function loadTubeExtraDirections(slot) {
+  const sel = $('tubeDirSelect' + slot);
+  const line = slot === 2 ? ui.tubeline2 : ui.tubeline3;
+  if (slot === 2) ui.tubedir2 = ui.tubedir2 || '';
+  if (!line) {
+    sel.innerHTML = '<option value="">Pick a line first…</option>';
+    sel.disabled = true;
+    if (slot === 2) { ui.tubedir2 = ''; $('tubeSlot3').hidden = true; }
+    else ui.tubedir3 = '';
+    updateTubeSplitHint();
+    render();
+    return;
+  }
+  sel.disabled = true;
+  sel.innerHTML = '<option value="">Loading directions…</option>';
+  const dirs = await api.tubeDirections(line, ui.tube);
+  const chosen = slot === 2 ? ui.tubedir2 : ui.tubedir3;
+  sel.innerHTML = '';
+  for (const d of dirs) {
+    const note = d.due ? `${d.due} due now` : 'none due right now';
+    sel.append(new Option(`${d.name} — ${note}`, d.name));
+  }
+  sel.disabled = false;
+  const pick = dirs.find((d) => d.name === chosen) || dirs[0];
+  if (pick) {
+    sel.value = pick.name;
+    if (slot === 2) ui.tubedir2 = pick.name; else ui.tubedir3 = pick.name;
+  }
+  sel.onchange = () => {
+    if (slot === 2) ui.tubedir2 = sel.value; else ui.tubedir3 = sel.value;
+    updateTubeSplitHint();
+    render();
+  };
+  if (slot === 2) $('tubeSlot3').hidden = false;
+  updateTubeSplitHint();
+  render();
+}
+
+// The Tube's dwell is shared between its screens, so say what that works out at.
+function updateTubeSplitHint() {
+  const n = tubeSlotCount();
+  const each = Math.max(3, Math.floor(ui.dwtube / Math.max(1, n)));
+  $('tubeSplitHint').textContent = n > 1
+    ? `${n} Tube screens share the Tube's ${ui.dwtube}s, so each shows for about ${each}s.`
+    : '';
+}
+
+function tubeSlotCount() {
+  return [[ui.tubeline, ui.tubedir], [ui.tubeline2, ui.tubedir2], [ui.tubeline3, ui.tubedir3]]
+    .filter(([l, d]) => l && d).length;
 }
 
 async function previewTube() {

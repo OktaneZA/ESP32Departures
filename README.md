@@ -66,7 +66,7 @@ proper dot-matrix font. Enable any combination — the board cycles through them
 |---|---|
 | 🚆 **Trains** | Anywhere in the UK, from National Rail. Filter to a destination or platform |
 | 🚌 **Buses** | Every London stop, live from TfL — **free and keyless**. Rest of the UK via [TransportAPI](docs/transportapi-key.md) |
-| 🚇 **London Underground** | Any Tube station, live from TfL — **free and keyless**. One line in one direction, so every row is a train you can catch |
+| 🚇 **London Underground** | Any Tube station, live from TfL — **free and keyless**. One line in one direction per screen, so every row is a train you can catch — and up to three lines at the same station, which the board cycles through |
 | ⛴️ **River boats** | Uber Boat by Thames Clippers (RB1/RB4/RB6) and the Woolwich Ferry |
 | 🌦️ **Weather** | Right where your stop is. No extra setup, no second account |
 | 🕐 **Clock** | NTP-accurate, automatic BST, fills the screen on demand |
