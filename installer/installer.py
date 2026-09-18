@@ -1044,16 +1044,40 @@ def tube_arrivals(line_id, station, direction=""):
 
 
 def tube_dir_tag(token):
-    """The direction, shrunk to fit the row's 52px route column (about four
-    characters). Mirrors tube_api.cpp's dirTag()."""
-    compass = {"northbound": "N/B", "southbound": "S/B",
-               "eastbound": "E/B", "westbound": "W/B"}
-    hit = compass.get(token.lower())
-    if hit:
-        return hit
-    if token.lower().startswith("platform "):
-        return "P" + token[9:]
-    return token[:3]
+    """The direction, shrunk to fit the row's 52px route column.
+
+    Every label was measured against that width, and each rule exists because
+    the swept table turned up a name plain truncation mangled: "Inner Rail"
+    became "Inn", "Northbound Fast" became "Nor" - the same as an ordinary
+    northbound train - and "Westbound Platform 26" became "Wes". Mirrors
+    tube_api.cpp's dirTag() and web/js/api.js's tubeDirTag()."""
+    initial = {"north": "N", "south": "S", "east": "E", "west": "W"}
+    t = token.strip()
+
+    # "Westbound Platform 26": the platform number neither fits nor matters.
+    m = re.match(r"^(north|south|east|west)bound\s+platform\s+\d+$", t, re.I)
+    if m:
+        t = m.group(1) + "bound"
+
+    m = re.match(r"^(north|south|east|west)bound$", t, re.I)
+    if m:
+        return initial[m.group(1).lower()] + "/B"
+    # Harrow-on-the-Hill has fast and stopping platforms, so they must differ.
+    # "N/BF" measured too wide for the column.
+    m = re.match(r"^(north|south|east|west)bound\s+fast$", t, re.I)
+    if m:
+        return initial[m.group(1).lower()] + "BF"
+    if re.match(r"^inner rail$", t, re.I):
+        return "IN"
+    if re.match(r"^outer rail$", t, re.I):
+        return "OUT"
+    # Chesham's single platform serves both ways: "North / South".
+    m = re.match(r"^(north|south|east|west)\s*/\s*(north|south|east|west)$", t, re.I)
+    if m:
+        return initial[m.group(1).lower()] + "/" + initial[m.group(2).lower()]
+    if t.lower().startswith("platform "):
+        return "P" + t[9:]
+    return t[:3]
 
 
 def tube_destination(p):

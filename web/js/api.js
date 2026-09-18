@@ -553,13 +553,31 @@ export async function tubeArrivals(lineId, station, direction = '') {
   return { status: 'ok', rows };
 }
 
-// The row's route column is 52px — about four characters — so the direction is
-// abbreviated to three. Mirrors tube_api.cpp's dirTag().
+// The direction, shrunk to fit the row's 52px route column. Every label here was
+// measured against that width, and each rule exists because the swept table
+// turned up a name the old three-character truncation mangled: "Inner Rail"
+// became "Inn", "Northbound Fast" became "Nor" — the same as an ordinary
+// northbound train — and "Westbound Platform 26" became "Wes".
+// Mirrors tube_api.cpp's dirTag() and installer.py's tube_dir_tag().
 export function tubeDirTag(token) {
-  const t = String(token || '');
-  const compass = { northbound: 'N/B', southbound: 'S/B', eastbound: 'E/B', westbound: 'W/B' };
-  const hit = compass[t.toLowerCase()];
-  if (hit) return hit;
+  let t = String(token || '').trim();
+  const initial = (w) => ({ north: 'N', south: 'S', east: 'E', west: 'W' })[w.toLowerCase()] || '';
+
+  // "Westbound Platform 26": the platform number neither fits nor matters.
+  const withPlatform = /^(north|south|east|west)bound\s+platform\s+\d+$/i.exec(t);
+  if (withPlatform) t = withPlatform[1] + 'bound';
+
+  const bound = /^(north|south|east|west)bound$/i.exec(t);
+  if (bound) return initial(bound[1]) + '/B';
+  // Harrow-on-the-Hill has fast and stopping platforms, so they must differ.
+  // "N/BF" measured too wide for the column.
+  const fast = /^(north|south|east|west)bound\s+fast$/i.exec(t);
+  if (fast) return initial(fast[1]) + 'BF';
+  if (/^inner rail$/i.test(t)) return 'IN';
+  if (/^outer rail$/i.test(t)) return 'OUT';
+  // Chesham's single platform serves both ways: "North / South".
+  const both = /^(north|south|east|west)\s*\/\s*(north|south|east|west)$/i.exec(t);
+  if (both) return initial(both[1]) + '/' + initial(both[2]);
   if (/^platform /i.test(t)) return 'P' + t.slice(9);
   return t.slice(0, 3);
 }

@@ -81,23 +81,60 @@ String platformToken(const String& platformName) {
     return token;
 }
 
+// The first letter of a compass word, or 0 if it is not one.
+char compassInitial(const String& word) {
+    if (equalsIgnoreCase(word, "North")) return 'N';
+    if (equalsIgnoreCase(word, "South")) return 'S';
+    if (equalsIgnoreCase(word, "East"))  return 'E';
+    if (equalsIgnoreCase(word, "West"))  return 'W';
+    return 0;
+}
+
 // The direction, shrunk to fit the row's route column. That column runs from
-// BUS_ROUTE_X to BUS_DEST_X — 52px, about four characters of the row font, which
-// is why bus routes like "N38" fit and "Northbound" would sprawl across the
-// destination beside it. Three characters is the safe budget.
+// BUS_ROUTE_X to BUS_DEST_X — 52px of the row font, which is why bus routes
+// like "N38" fit and "Northbound" would sprawl across the destination beside
+// it. Every label below was measured against that width.
 //
-// A station with no compass word keeps its platform number instead ("Platform 2"
-// -> "P2"), which is the only thing left that distinguishes one direction from
-// the other there.
+// Truncating to three characters was not enough once the swept table showed
+// what TfL really calls its platforms. "Inner Rail" became "Inn", which reads
+// as a word rather than a direction; "Northbound Fast" became "Nor", the same
+// as an ordinary northbound train on the one line where the two are different
+// platforms; and "Westbound Platform 26" became "Wes". Each has a rule now,
+// and anything unforeseen still falls back to the first three characters.
 String dirTag(const String& token) {
-    if (equalsIgnoreCase(token, "Northbound")) return "N/B";
-    if (equalsIgnoreCase(token, "Southbound")) return "S/B";
-    if (equalsIgnoreCase(token, "Eastbound"))  return "E/B";
-    if (equalsIgnoreCase(token, "Westbound"))  return "W/B";
-    if (token.startsWith("Platform ") || token.startsWith("platform ")) {
-        return "P" + token.substring(9);
+    String t = token;
+    t.trim();
+
+    // "Westbound Platform 26" is a westbound train; the platform number is the
+    // part that does not fit and does not matter.
+    int platformAt = t.indexOf(" Platform ");
+    if (platformAt > 0 && compassInitial(t.substring(0, platformAt - 5))) {
+        t = t.substring(0, platformAt);
     }
-    return token.substring(0, 3);
+
+    if (t.endsWith("bound") || t.endsWith("Bound")) {          // TfL writes both
+        char c = compassInitial(t.substring(0, t.length() - 5));
+        if (c) return String(c) + "/B";
+    }
+    // Harrow-on-the-Hill runs fast and stopping trains from separate platforms,
+    // so the two must not both read "N/B". "N/BF" measured too wide.
+    if (t.endsWith(" Fast")) {
+        char c = compassInitial(t.substring(0, t.length() - 10));
+        if (c) return String(c) + "BF";
+    }
+    if (equalsIgnoreCase(t, "Inner Rail")) return "IN";
+    if (equalsIgnoreCase(t, "Outer Rail")) return "OUT";
+    // Chesham's single platform serves both ways: "North / South".
+    int slash = t.indexOf(" / ");
+    if (slash > 0) {
+        char a = compassInitial(t.substring(0, slash));
+        char b = compassInitial(t.substring(slash + 3));
+        if (a && b) return String(a) + "/" + String(b);
+    }
+    if (t.startsWith("Platform ") || t.startsWith("platform ")) {
+        return "P" + t.substring(9);
+    }
+    return t.substring(0, 3);
 }
 
 // TfL sometimes has no real destination to give and says so in the `towards`

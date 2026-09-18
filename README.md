@@ -87,8 +87,10 @@ proper dot-matrix font. Enable any combination — the board cycles through them
 - **The buttons do something.** On the T-Display-S3, one holds the big clock up
   and the other skips to the next panel instead of waiting for it.
 - **Make it yours.** Classic amber, white, phosphor green, high contrast — or
-  any colour you pick — plus how long each screen holds. All from the web page,
-  no recompiling.
+  any colour you pick — plus how long each screen holds. You can also drop the
+  expected time from the bus, boat and Tube rows, which gives a long destination
+  about four more characters before it scrolls. All from the web page, no
+  recompiling.
 - **Settings live on the board.** They survive unplugging, and they survive
   firmware updates.
 - **You can check what it's running.** The board reports the MD5 of its own
@@ -211,8 +213,9 @@ one.
 
 <img src="docs/configurator-preview.png" alt="Live preview of the board" width="800">
 
-Pick your colours and how long each screen holds, and watch the preview change as
-you go. Then plug the board in and use the two steps at the bottom of the page:
+Pick your colours, how long each screen holds, and whether the bus, boat and
+Tube rows show the expected time — hiding it widens the destination — and watch
+the preview change as you go. Then plug the board in and use the two steps at the bottom of the page:
 
 1. **Flash the firmware** — once on a new board, and again for updates. It
    carries straight on into step 2, so normally this one button does everything.

@@ -159,9 +159,14 @@ ESP32Departures/
   The direction filter matches TfL's `platformName` ("Northbound - Platform 3"),
   not its `direction` field, which is empty for the whole Circle line. Because
   the line is already named in the header, each row's route column carries the
-  direction instead, abbreviated to fit: `N/B`, `S/B`, or `P2` at a station like
-  Edgware Road where TfL gives only a platform number. Screen timing is
-  `TUBE_SCREEN_SECONDS`, and `RAW_TUBE_DEBUG` prints the parsed trains.
+  direction instead, abbreviated to fit its 52 px: `N/B` and `S/B`, `P2` at a
+  station like Edgware Road where TfL gives only a platform number, `IN` and
+  `OUT` for the Hainault loop's Inner and Outer Rail, `NBF` and `SBF` for
+  Harrow-on-the-Hill's fast platforms, and `N/S` for Chesham's one platform
+  serving both ways. Every label is measured against that column, which is why
+  the fast platforms are not `N/BF`: at 50 px it would run into the destination,
+  and that column is not clipped. Screen timing is `TUBE_SCREEN_SECONDS`, and
+  `RAW_TUBE_DEBUG` prints the parsed trains.
   Data provided by Transport for London.
 - **The web configurator needs no backend.** Every API it uses is CORS-open, so
   it is plain static hosting: TfL Unified and Countdown send
