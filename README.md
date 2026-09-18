@@ -86,6 +86,11 @@ proper dot-matrix font. Enable any combination — the board cycles through them
   for a few seconds.
 - **The buttons do something.** On the T-Display-S3, one holds the big clock up
   and the other skips to the next panel instead of waiting for it.
+- **It can answer to Home Assistant.** Optional, and off unless you want it: the
+  board appears as a device with a light for the screen, buttons for panel and
+  refresh, and sensors for what it's showing. Which means it can stay dark until
+  a motion sensor says somebody's actually there — something a clock-based
+  schedule can never know. [Setting it up](docs/mqtt.md).
 - **Make it yours.** Classic amber, white, phosphor green, high contrast — or
   any colour you pick — plus how long each screen holds. You can also drop the
   expected time from the bus, boat and Tube rows, which gives a long destination
@@ -299,6 +304,7 @@ If you're not showing trains, skip this entirely.
 | [Getting your train data key](docs/api-key.md) | Free National Rail key, step by step with screenshots |
 | [Getting your bus data key](docs/transportapi-key.md) | Only for stops outside London |
 | [Choosing a board](docs/boards.md) | What differs between the two, and why |
+| [Home Assistant over MQTT](docs/mqtt.md) | Control the screen from HA — broker setup, containerised or as an add-on |
 | [Technical detail](DETAILS.md) | Building the firmware, the data feeds, project layout |
 | [The setup page itself](web/README.md) | Running or hosting your own copy |
 | [Command-line installer](installer/README.md) | A desktop alternative — **T-Display-S3 only** |
