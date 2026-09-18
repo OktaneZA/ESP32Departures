@@ -38,9 +38,21 @@ jobs:
             .pio
           key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
 
+      # Stamp the release tag into the image. The board reports it to Home
+      # Assistant as its software version, so a board behaving oddly can say
+      # which firmware it is running. Without this the default in app_config.h
+      # applies and every released board would claim to be "dev".
+      #
+      # shell: bash because this runner defaults to PowerShell, which does not
+      # pass the escaped quotes through to the compiler intact.
       - name: Build firmware
+        shell: bash
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           pip install --upgrade platformio
+          export PLATFORMIO_BUILD_FLAGS="-DFW_VERSION=\\\"${TAG}\\\""
+          echo "building as ${TAG}"
           pio run
 
       # Into the per-board directory the binaries live in and the exe reads
