@@ -230,9 +230,74 @@ the preview change as you go. Then plug the board in and use the two steps at th
 Pick your board from the list your browser offers, and it restarts showing live
 times.
 
+**Board not in the list your browser shows?** A brand-new board hasn't switched
+its USB port on yet — see [The board isn't in the list](#the-board-isnt-in-the-list).
+It is one button press.
+
 **Flashing failed, or the screen went dark?** See [If flashing fails](#if-flashing-fails).
 
 **Changing it later?** Same page, any time. Nothing is baked into the firmware.
+
+---
+
+## The board isn't in the list
+
+You press **Flash the firmware**, the browser asks which device to connect to —
+and the board isn't there. Bluetooth entries, maybe, or nothing at all.
+
+The page doesn't filter that list: it shows every serial device your computer
+can see. So if the board is missing, your computer isn't seeing it either, and
+the problem is before the browser. Three causes, in the order they actually
+happen.
+
+### 1. A brand-new board hasn't switched its USB port on
+
+A new T-Display-S3 arrives running LilyGo's own demo. You will see it trying to
+join a network called something like `LilyGo-AABB` and asking for the EspTouch
+app. **That is not this firmware** — it is what the board shipped with.
+
+On this board the USB port is provided by whatever program is running, and the
+demo doesn't provide one. The board sits there lit up, obviously alive, and
+completely invisible to your computer.
+
+> **Hold the BOOT button down, plug the USB cable in, then let go of BOOT.**
+
+That starts the chip's own built-in loader, which always provides a USB port no
+matter what is installed. Now press **Flash the firmware** and the board will be
+in the list. Once Departure Buddy is on there it provides its own USB port every
+time it starts, so you only ever need this once.
+
+If you can't tell which button is which, try one and then the other — you cannot
+do any harm by pressing the wrong one.
+
+### 2. A charge-only USB cable
+
+Plenty of cables carry power and no data. The board lights up, which is exactly
+why this one fools people — it looks like it's working. Try a different cable,
+ideally one you've used to move files to or from a phone.
+
+### 3. Windows is missing the driver — Cheap Yellow Display only
+
+The CYD talks to your computer through a separate CH340 chip, and Windows often
+doesn't have the driver for it. The T-Display-S3 needs no driver at all, so this
+one only applies to the CYD.
+
+Install the [CH340 driver](https://www.wch-ic.com/downloads/CH341SER_EXE.html),
+then unplug and replug the board.
+
+### Still nothing? Look in Device Manager
+
+Open Device Manager, then unplug and replug the board and watch which entry
+appears or disappears. That tells you which of the three you have:
+
+| What you see | What it means |
+|---|---|
+| Nothing changes at all | Cable, or the port — causes 1 and 2 |
+| **Ports (COM & LPT)** → `USB Serial Device (COMx)` | The board is fine; it should be in the browser's list |
+| **Other devices** → unknown device with a yellow `!`, or `USB2.0-Serial` | Missing CH340 driver — cause 3, a CYD |
+
+A front-panel USB socket or an unpowered hub is worth ruling out too: plug
+straight into the back of the machine.
 
 ---
 

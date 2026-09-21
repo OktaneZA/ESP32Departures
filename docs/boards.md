@@ -38,6 +38,23 @@ The web flasher now compares the chip `esptool` reports against the chip the
 manifest names, and refuses before writing a byte. The manifest carries the
 offsets per board so the images and their addresses always travel together.
 
+### The USB port comes from somewhere different on each board
+
+On the **CYD** a separate CH340 chip sits between the ESP32 and the USB socket.
+It enumerates whenever the board has power, whatever the ESP32 is or isn't
+doing — so the port is always there, provided Windows has the driver for it.
+
+On the **T-Display-S3** there is no bridge chip. The USB port is produced by the
+ESP32 itself, which means it exists only while a program that asks for it is
+running. This firmware asks for it (`ARDUINO_USB_CDC_ON_BOOT=1` in
+`platformio.ini`); the demo LilyGo ships the board with does not.
+
+That is why a brand-new S3 appears completely dead to a computer while being
+visibly alive on its own screen, and why the fix is to hold **BOOT** while
+plugging it in: that starts the chip's ROM loader, which provides a port
+unconditionally. It also explains the asymmetry in what goes wrong for people —
+a missing S3 is usually this, while a missing CYD is usually the CH340 driver.
+
 ### No PSRAM changes more than it sounds like
 
 The S3 keeps its whole 320×170 frame in PSRAM for nothing. The CYD's frame would
