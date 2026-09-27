@@ -37,6 +37,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -79,6 +80,29 @@ String platformToken(const String& platformName) {
     String token = sep < 0 ? platformName : platformName.substring(0, sep);
     token.trim();
     return token;
+}
+
+// Whether a prediction's platform token is the configured direction.
+//
+// Usually a plain case-insensitive compare, because platformToken() has already
+// cut "Westbound - Platform 1" down to "Westbound". But TfL does not always
+// write the separator: the swept table holds "Westbound Platform 26", and a
+// record spelled that way would compare unequal to a stored "Westbound" and be
+// dropped silently. Enough of those and a direction that has trains shows "No
+// trains due" (#14). So a token that is the direction plus a platform number is
+// the direction.
+//
+// Only a platform number is forgiven. "Northbound Fast" at Harrow-on-the-Hill
+// is a different platform from "Northbound", and must stay unequal.
+bool directionMatches(const String& token, const String& dir) {
+    if (equalsIgnoreCase(token, dir)) return true;
+    if (token.length() <= dir.length()) return false;
+    if (!equalsIgnoreCase(token.substring(0, dir.length()), dir)) return false;
+    String rest = token.substring(dir.length());
+    rest.trim();
+    if (rest.startsWith("-")) { rest = rest.substring(1); rest.trim(); }
+    return rest.length() > 9 &&
+           equalsIgnoreCase(rest.substring(0, 9), "Platform ");
 }
 
 // The first letter of a compass word, or 0 if it is not one.
@@ -296,25 +320,55 @@ Fetch fetchArrivals(const Config& cfg, const String& line, const String& dir,
 
     String name;
     std::vector<TubeArrival> parsed;
-    std::vector<String> seen;   // vehicleIds already taken, to drop duplicates
+    // vehicleId -> index in `parsed`, to collapse one train reported twice.
+    std::vector<std::pair<String, size_t>> seen;
+
+    // Why each prediction that did not make the board was left off. A screen
+    // that says "No trains due" while trains are running is otherwise
+    // undiagnosable from the serial log (#14): the feed, the direction filter
+    // and the time window all look the same from the outside.
+    int total = 0, noPlatform = 0, otherDir = 0, outOfWindow = 0, dup = 0;
+    String otherTokens;   // the first few directions that did not match
 
     for (JsonObjectConst p : preds) {
+        ++total;
         String platformName = (const char*)(p["platformName"] | "");
-        if (platformName.isEmpty()) continue;
+        if (platformName.isEmpty()) { ++noPlatform; continue; }
 
         String token = platformToken(platformName);
-        if (!dir.isEmpty() && !equalsIgnoreCase(token, dir)) continue;
+        if (!dir.isEmpty() && !directionMatches(token, dir)) {
+            ++otherDir;
+            if (otherTokens.length() < 60 && otherTokens.indexOf("'" + token + "'") < 0) {
+                if (otherTokens.length()) otherTokens += ", ";
+                otherTokens += "'" + token + "'";
+            }
+            continue;
+        }
 
         int32_t eta = p["timeToStation"] | (int32_t)-1;
-        if (eta < 0) continue;
-        if (eta > TUBE_MAX_ETA_MINUTES * 60) continue;   // beyond the window
+        if (eta < 0 || eta > TUBE_MAX_ETA_MINUTES * 60) { ++outOfWindow; continue; }
 
         // A train reported twice — once approaching, once at the platform —
-        // would cost a real departure its slot on a four-row screen.
+        // would cost a real departure its slot on a four-row screen. Those two
+        // records are the same train *now*, so their times agree; the same id
+        // twenty minutes apart is a set coming back round (or a feed reusing
+        // ids), and is a second train. Of a real pair, the sooner one is kept:
+        // the feed is unordered, so the first seen is not necessarily it.
         String vehicle = (const char*)(p["vehicleId"] | "");
         if (vehicle.length()) {
-            if (std::find(seen.begin(), seen.end(), vehicle) != seen.end()) continue;
-            seen.push_back(vehicle);
+            bool duplicate = false;
+            for (auto& s : seen) {
+                if (s.first != vehicle) continue;
+                TubeArrival& kept = parsed[s.second];
+                int32_t gap = kept.etaSeconds > eta ? kept.etaSeconds - eta
+                                                    : eta - kept.etaSeconds;
+                if (gap > 120) continue;
+                if (eta < kept.etaSeconds) kept.etaSeconds = eta;
+                duplicate = true;
+                break;
+            }
+            if (duplicate) { ++dup; continue; }
+            seen.push_back({vehicle, parsed.size()});
         }
 
         if (name.isEmpty()) name = stripStationSuffix((const char*)(p["stationName"] | ""));
@@ -342,6 +396,16 @@ Fetch fetchArrivals(const Config& cfg, const String& line, const String& dir,
                       platformName.c_str(), ar.line.c_str(),
                       ar.destination.c_str(), (int)ar.etaSeconds);
 #endif
+    }
+
+    // One line per poll, cheap, and it is the whole story of an empty screen.
+    Serial.printf("[tube] %s %s: %d predictions, %d shown "
+                  "(other direction %d, outside %d min %d, duplicate %d, no platform %d)\n",
+                  line.c_str(), dir.c_str(), total, (int)parsed.size(),
+                  otherDir, TUBE_MAX_ETA_MINUTES, outOfWindow, dup, noPlatform);
+    if (parsed.empty() && otherDir) {
+        Serial.printf("[tube] nothing matched '%s'; the feed said %s\n",
+                      dir.c_str(), otherTokens.c_str());
     }
 
     // The feed returns predictions unordered; the board wants soonest first.
