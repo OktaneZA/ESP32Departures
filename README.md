@@ -123,8 +123,6 @@ and price.
 <div align="center">
 
 <b><a href="https://www.amazon.co.uk/LILYGO-T-Display-S3-ESP32-S3-Display-Development/dp/B0BRTT727Z?th=1&linkCode=ll2&tag=oktaneza-21&linkId=5466662ac0076e3e099592eae3f54ffc&ref_=as_li_ss_tl">🛒 Buy the T-Display-S3 (Amazon UK)</a></b>
-&nbsp;&nbsp;·&nbsp;&nbsp;
-<b><a href="https://www.amazon.co.uk/dp/B0F24X83FC?tag=oktaneza-21">🛒 Buy the Cheap Yellow Display (Amazon UK)</a></b>
 
 <sub>Affiliate links — the only kickback I get for maintaining this project.</sub>
 
